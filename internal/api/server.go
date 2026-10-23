@@ -13,11 +13,13 @@ import (
 	"github.com/jenny-zeng/lai-dian-yi-yun/internal/game"
 	"github.com/jenny-zeng/lai-dian-yi-yun/internal/mcp"
 	"github.com/jenny-zeng/lai-dian-yi-yun/internal/room"
+	"github.com/jenny-zeng/lai-dian-yi-yun/internal/tts"
 )
 
 type Server struct {
 	hub      *room.Hub
 	mcp      *mcp.Server
+	tts      *tts.Service
 	upgrader websocket.Upgrader
 	subsMu   sync.RWMutex
 	subs     map[string]map[*wsClient]struct{}
@@ -35,6 +37,7 @@ func NewServer(hub *room.Hub, webRoot string) *Server {
 	s := &Server{
 		hub: hub,
 		mcp: mcp.New(hub),
+		tts: tts.NewService(),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
@@ -45,10 +48,17 @@ func NewServer(hub *room.Hub, webRoot string) *Server {
 	return s
 }
 
+func (s *Server) TTSEnabled() bool {
+	return s.tts != nil && s.tts.Enabled()
+}
+
 func (s *Server) Handler(webRoot string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/asr", s.handleASR)
+	mux.HandleFunc("/api/tts/status", s.handleTTSStatus)
+	mux.HandleFunc("/api/tts/roster", s.handleTTSRoster)
+	mux.HandleFunc("/api/tts", s.handleTTSSynthesize)
 	mux.HandleFunc("/api/rooms", s.handleRooms)
 	mux.HandleFunc("/api/rooms/", s.handleRoomAction)
 	mux.HandleFunc("/ws", s.handleWS)

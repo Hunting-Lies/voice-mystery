@@ -395,7 +395,8 @@ func (r *Room) AutoActBots() (changed bool) {
 		if cur != nil && cur.IsBot {
 			text := r.pickBotLine(cur.Role, true)
 			_ = r.submitStatementNoLock(curID, text)
-			r.nextBotActAt = time.Now().Add(2 * time.Second)
+			// 给 Demo TTS 留出朗读他人发言的时间
+			r.nextBotActAt = time.Now().Add(4 * time.Second)
 			return true
 		}
 	case PhaseCrossExam:
@@ -405,7 +406,7 @@ func (r *Room) AutoActBots() (changed bool) {
 			if p != nil && p.IsBot {
 				text := r.pickBotLine(p.Role, false)
 				_ = r.submitCrossNoLock(cur.TargetPlayerID, text)
-				r.nextBotActAt = time.Now().Add(2 * time.Second)
+				r.nextBotActAt = time.Now().Add(4 * time.Second)
 				return true
 			}
 		}

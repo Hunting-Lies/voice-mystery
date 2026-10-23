@@ -222,6 +222,12 @@ input:focus, textarea:focus { border-color: var(--accent); }
   line-height: 1.7;
   font-size: 1.05rem;
 }
+.phone-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
 
 .action { margin-top: 1rem; }
 .label {
