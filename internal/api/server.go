@@ -59,6 +59,7 @@ func (s *Server) Handler(webRoot string) http.Handler {
 	mux.HandleFunc("/api/tts/status", s.handleTTSStatus)
 	mux.HandleFunc("/api/tts/roster", s.handleTTSRoster)
 	mux.HandleFunc("/api/tts", s.handleTTSSynthesize)
+	mux.HandleFunc("/api/scripts", s.handleScripts)
 	mux.HandleFunc("/api/rooms", s.handleRooms)
 	mux.HandleFunc("/api/rooms/", s.handleRoomAction)
 	mux.HandleFunc("/ws", s.handleWS)
@@ -103,16 +104,31 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "game": "来电疑云"})
 }
 
+func (s *Server) handleScripts(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"scripts": game.ScriptMetas()})
+}
+
 func (s *Server) handleRooms(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	var body struct {
-		Name string `json:"name"`
+		Name     string `json:"name"`
+		ScriptID string `json:"scriptId"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
-	roomObj := s.hub.Create()
+	if body.ScriptID != "" {
+		if _, err := game.ScriptByID(body.ScriptID); err != nil {
+			writeErr(w, err)
+			return
+		}
+	}
+	roomObj := s.hub.Create(body.ScriptID)
 	name := strings.TrimSpace(body.Name)
 	if name == "" {
 		name = "房主"

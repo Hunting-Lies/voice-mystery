@@ -6,7 +6,7 @@ import (
 )
 
 func TestFullMatchWithBots(t *testing.T) {
-	r := NewRoom("TEST")
+	r := NewRoom("TEST", DefaultScriptID())
 	if _, err := r.AddPlayer("人类", false); err != nil {
 		t.Fatal(err)
 	}

@@ -29,11 +29,12 @@ func (s *Server) Tools() []Tool {
 	return []Tool{
 		{
 			Name:        "create_room",
-			Description: "创建一局《来电疑云》房间，返回房间号。可选 host_name 作为房主昵称。",
+			Description: "创建一局《来电疑云》房间，返回房间号。可选 host_name、script_id（剧本，见 GET /api/scripts）。",
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"host_name": map[string]any{"type": "string", "description": "房主昵称"},
+					"host_name":  map[string]any{"type": "string", "description": "房主昵称"},
+					"script_id":  map[string]any{"type": "string", "description": "剧本 ID，默认 midnight-bank"},
 				},
 			},
 		},
@@ -187,7 +188,13 @@ func (s *Server) Call(name string, args map[string]any) (any, error) {
 	}
 	switch name {
 	case "create_room":
-		r := s.hub.Create()
+		scriptID := str("script_id")
+		if scriptID != "" {
+			if _, err := game.ScriptByID(scriptID); err != nil {
+				return nil, err
+			}
+		}
+		r := s.hub.Create(scriptID)
 		host := str("host_name")
 		if host == "" {
 			host = "灵矽主持"

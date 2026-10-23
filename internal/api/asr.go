@@ -111,10 +111,7 @@ func runLocalWhisper(wavPath string) (string, error) {
 		return "", fmt.Errorf("找不到 scripts/asr_transcribe.py")
 	}
 
-	py := "python3"
-	if p, err := exec.LookPath("python3"); err == nil {
-		py = p
-	}
+	py := resolveASRPython(script)
 	ctxCmd := exec.Command(py, script, wavPath)
 	ctxCmd.Env = append(os.Environ(), "WHISPER_MODEL="+getenv("WHISPER_MODEL", "tiny"))
 	var stdout, stderr bytes.Buffer
@@ -137,6 +134,38 @@ func runLocalWhisper(wavPath string) (string, error) {
 		_ = ctxCmd.Process.Kill()
 		return "", fmt.Errorf("识别超时")
 	}
+}
+
+func resolveASRPython(scriptPath string) string {
+	if p := strings.TrimSpace(os.Getenv("ASR_PYTHON")); p != "" {
+		return p
+	}
+	root := asrProjectRoot(scriptPath)
+	if root != "" {
+		venvPy := filepath.Join(root, ".venv-asr", "bin", "python3")
+		if st, err := os.Stat(venvPy); err == nil && !st.IsDir() {
+			return venvPy
+		}
+	}
+	if p, err := exec.LookPath("python3"); err == nil {
+		return p
+	}
+	return "python3"
+}
+
+func asrProjectRoot(scriptPath string) string {
+	if scriptPath != "" {
+		dir := filepath.Dir(scriptPath)
+		if filepath.Base(dir) == "scripts" {
+			return filepath.Dir(dir)
+		}
+	}
+	if wd, err := os.Getwd(); err == nil {
+		if st, err := os.Stat(filepath.Join(wd, "scripts", "asr_transcribe.py")); err == nil && !st.IsDir() {
+			return wd
+		}
+	}
+	return ""
 }
 
 func getenv(k, def string) string {

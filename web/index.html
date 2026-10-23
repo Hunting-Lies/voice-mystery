@@ -23,6 +23,10 @@
       <p class="eyebrow">灵矽 Builder Day · 语音辨谎</p>
       <h1>午夜响起的<br />那通电话</h1>
       <p class="lead">多人语音社交推理。听清线索，识破骗子，投出真凶。</p>
+      <div class="story-block">
+        <p class="label">选择故事</p>
+        <div id="storyList" class="story-list"></div>
+      </div>
       <div class="form-row">
         <input id="nameInput" maxlength="12" placeholder="你的代号" value="接线员" />
       </div>
@@ -59,7 +63,7 @@
           <div class="phase-pill" id="phasePill">大厅</div>
           <div class="phone">
             <div class="phone-screen">
-              <div class="caller">未知来电 · 星河银行？</div>
+              <div class="caller" id="callerHint">未知来电 · …</div>
               <div class="host-line" id="hostLine">…</div>
             </div>
             <div class="phone-actions">
@@ -83,7 +87,7 @@
               </div>
             </div>
             <div id="voteActions" class="hidden">
-              <label class="label">指认来电骗子</label>
+              <label class="label" id="voteLabel">指认来电骗子</label>
               <div id="voteTargets" class="vote-grid"></div>
             </div>
             <div id="endActions" class="hidden">

@@ -21,19 +21,19 @@ func NewHub() *Hub {
 	return h
 }
 
-func (h *Hub) Create() *game.Room {
+func (h *Hub) Create(scriptID string) *game.Room {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for i := 0; i < 20; i++ {
 		code := game.RandomRoomCode()
 		if _, ok := h.rooms[code]; !ok {
-			r := game.NewRoom(code)
+			r := game.NewRoom(code, scriptID)
 			h.rooms[code] = r
 			return r
 		}
 	}
 	code := game.RandomRoomCode() + game.RandomRoomCode()[:2]
-	r := game.NewRoom(code)
+	r := game.NewRoom(code, scriptID)
 	h.rooms[code] = r
 	return r
 }

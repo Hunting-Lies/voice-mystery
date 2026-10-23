@@ -53,10 +53,14 @@ type Room struct {
 	nextBotActAt   time.Time // 限制机器人出手速度，给真人留操作时间
 }
 
-func NewRoom(code string) *Room {
+func NewRoom(code string, scriptID string) *Room {
+	script, err := ScriptByID(scriptID)
+	if err != nil {
+		script = DefaultScript()
+	}
 	return &Room{
 		Code:      strings.ToUpper(code),
-		Script:    DefaultScript(),
+		Script:    script,
 		Phase:     PhaseLobby,
 		Players:   make(map[string]*Player),
 		votes:     make(map[string]string),
@@ -125,6 +129,9 @@ func (r *Room) FillBots(target int) ([]*Player, error) {
 		target = MaxPlayers
 	}
 	botNames := []string{"阿北", "小满", "老周", "青青", "阿凯"}
+	if len(r.Script.BotNames) > 0 {
+		botNames = r.Script.BotNames
+	}
 	added := make([]*Player, 0)
 	idx := 0
 	for len(r.Players) < target {
@@ -182,6 +189,7 @@ func (r *Room) Start() error {
 			p.Role = RoleCitizen
 		}
 	}
+	r.assignStoryCharactersLocked(scammerID)
 
 	r.statements = nil
 	r.votes = make(map[string]string)
@@ -206,7 +214,7 @@ func (r *Room) AdvanceFromBriefing() error {
 	r.Phase = PhaseStatement
 	r.speakerIdx = 0
 	cur := r.Players[r.order[r.speakerIdx]]
-	r.hostLine = fmt.Sprintf("盘问开始。请 %s 先发言：你听到了什么？你信哪一句？", cur.Name)
+	r.hostLine = r.Script.statementOpen(cur.Name)
 	r.phaseDeadline = time.Now().Add(45 * time.Second)
 	return nil
 }
@@ -303,7 +311,7 @@ func (r *Room) SubmitCrossAnswer(playerID, text string) error {
 func (r *Room) enterVoteLocked() error {
 	r.Phase = PhaseVote
 	r.votes = make(map[string]string)
-	r.hostLine = "投票阶段：请投出你认为的「来电骗子」。每人一票，不能弃权。"
+	r.hostLine = r.Script.votePrompt()
 	r.phaseDeadline = time.Now().Add(60 * time.Second)
 	return nil
 }
@@ -360,17 +368,27 @@ func (r *Room) revealLocked() error {
 	r.Phase = PhaseReveal
 	if scammer != nil {
 		r.revealed = scammer.Name
+		if scammer.characterName != "" {
+			r.revealed = scammer.characterName
+		}
+	}
+	scammerName := r.revealed
+	if scammer != nil {
+		scammerName = scammer.Name
 	}
 	if tie || topID == "" {
 		r.winner = "scammer"
-		r.hostLine = fmt.Sprintf("平票！骗子逃脱。真正的来电骗子是 %s。", r.revealed)
+		r.hostLine = r.Script.revealTie(scammerName)
 	} else if scammer != nil && topID == scammer.ID {
 		r.winner = "citizens"
-		r.hostLine = fmt.Sprintf("投票命中！%s 就是来电骗子。市民胜利。", scammer.Name)
+		r.hostLine = r.Script.revealCitizensWin(scammer.Name)
 	} else {
 		r.winner = "scammer"
 		accused := r.Players[topID]
-		r.hostLine = fmt.Sprintf("投错了！大家票给了 %s，真正的骗子是 %s。骗子胜利。", accused.Name, r.revealed)
+		r.hostLine = r.Script.revealScammerWin(accused.Name, scammerName)
+	}
+	if ep := strings.TrimSpace(r.Script.Epilogue); ep != "" {
+		r.hostLine = r.hostLine + "\n\n" + ep
 	}
 	r.Phase = PhaseEnd
 	r.phaseDeadline = time.Time{}
@@ -432,7 +450,7 @@ func (r *Room) advanceBriefingNoLock() error {
 	r.Phase = PhaseStatement
 	r.speakerIdx = 0
 	cur := r.Players[r.order[r.speakerIdx]]
-	r.hostLine = fmt.Sprintf("盘问开始。请 %s 先发言：你听到了什么？你信哪一句？", cur.Name)
+	r.hostLine = r.Script.statementOpen(cur.Name)
 	r.phaseDeadline = time.Now().Add(45 * time.Second)
 	return nil
 }
@@ -520,6 +538,54 @@ func (r *Room) botVoteTarget(selfID string) string {
 	return candidates[n.Int64()]
 }
 
+func (r *Room) assignStoryCharactersLocked(scammerPlayerID string) {
+	chars := r.Script.Characters
+	if len(chars) == 0 {
+		return
+	}
+	scammerIdx := -1
+	for i, c := range chars {
+		if c.IsScammer {
+			scammerIdx = i
+			break
+		}
+	}
+	if scammerIdx < 0 {
+		return
+	}
+	others := make([]int, 0, len(chars)-1)
+	for i := range chars {
+		if i != scammerIdx {
+			others = append(others, i)
+		}
+	}
+	for i := len(others) - 1; i > 0; i-- {
+		j, _ := rand.Int(rand.Reader, big.NewInt(int64(i+1)))
+		others[i], others[j.Int64()] = others[j.Int64()], others[i]
+	}
+	oi := 0
+	for _, id := range r.order {
+		p := r.Players[id]
+		p.characterName = ""
+		p.characterLabel = ""
+		p.characterCard = ""
+		var ci int
+		if id == scammerPlayerID {
+			ci = scammerIdx
+		} else if oi < len(others) {
+			ci = others[oi]
+			oi++
+		} else {
+			ci = others[oi%len(others)]
+			oi++
+		}
+		c := chars[ci]
+		p.characterName = c.Name
+		p.characterLabel = c.Label
+		p.characterCard = c.SecretCard
+	}
+}
+
 func (r *Room) PrivateView(playerID string) (*PrivateView, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -529,6 +595,15 @@ func (r *Room) PrivateView(playerID string) (*PrivateView, error) {
 	}
 	if r.Phase == PhaseLobby {
 		return &PrivateView{PlayerID: playerID, Role: "", SecretCard: "对局开始后将下发你的秘密身份卡。"}, nil
+	}
+	if p.characterCard != "" {
+		return &PrivateView{
+			PlayerID:       playerID,
+			Role:           p.Role,
+			SecretCard:     p.characterCard,
+			CharacterName:  p.characterName,
+			CharacterLabel: p.characterLabel,
+		}, nil
 	}
 	card := r.Script.CitizenCard
 	if p.Role == RoleScammer {
@@ -577,7 +652,12 @@ func (r *Room) Snapshot() PublicState {
 		VotesNeeded:       len(r.Players),
 		Winner:            r.winner,
 		RevealedScammer:   r.revealed,
+		ScriptID:          r.Script.ID,
 		ScriptTitle:       r.Script.Title,
+		CallerHint:        r.Script.CallerHint,
+		VoteLabel:         r.Script.voteLabel(),
+		CitizenRoleLabel:  r.Script.citizenRoleLabel(),
+		ScammerRoleLabel:  r.Script.scammerRoleLabel(),
 		PhaseDeadlineUnix: deadline,
 		CanStart:          r.Phase == PhaseLobby && len(r.Players) >= MinPlayers,
 	}
