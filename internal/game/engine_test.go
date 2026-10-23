@@ -19,11 +19,15 @@ func TestFullMatchWithBots(t *testing.T) {
 	if r.Snapshot().Phase != PhaseBriefing {
 		t.Fatalf("want briefing")
 	}
+	priv, err := r.PrivateView(r.order[0])
+	if err != nil || priv.Ability == AbilityNone {
+		t.Fatalf("expected ability on start, priv=%+v err=%v", priv, err)
+	}
 	if err := r.AdvanceFromBriefing(); err != nil {
 		t.Fatal(err)
 	}
 
-	for i := 0; i < 80; i++ {
+	for i := 0; i < 120; i++ {
 		r.mu.Lock()
 		r.nextBotActAt = time.Time{}
 		r.mu.Unlock()
@@ -48,6 +52,18 @@ func TestFullMatchWithBots(t *testing.T) {
 					_ = r.SubmitCrossAnswer(humanID, "因为正规银行不会这么做。")
 				}
 			}
+		case PhaseEvidence:
+			if len(snap.PublicClues) == 0 {
+				t.Fatal("evidence should expose clues")
+			}
+			_ = r.AdvanceFromEvidence()
+		case PhaseMark:
+			for _, o := range snap.Players {
+				if o.ID != humanID {
+					_ = r.MarkSuspect(humanID, o.ID)
+					break
+				}
+			}
 		case PhaseVote:
 			for _, o := range snap.Players {
 				if o.ID != humanID {
@@ -69,5 +85,8 @@ func TestFullMatchWithBots(t *testing.T) {
 	}
 	if snap.ValueSummary == "" || snap.ValueTheme == "" || len(snap.ValuePoints) == 0 {
 		t.Fatalf("expected value recap, theme=%q points=%d summary=%q", snap.ValueTheme, len(snap.ValuePoints), snap.ValueSummary)
+	}
+	if len(snap.Scores) == 0 {
+		t.Fatal("expected scores")
 	}
 }

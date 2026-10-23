@@ -32,6 +32,9 @@ type Player struct {
 	characterName   string
 	characterLabel  string
 	characterCard   string
+	Ability         AbilityKind `json:"ability,omitempty"`
+	AbilityUsed     bool        `json:"abilityUsed,omitempty"`
+	AuditResult     string      `json:"-"` // 鉴定结果仅私密视图
 }
 
 type Statement struct {
@@ -78,6 +81,11 @@ type PublicState struct {
 	ValuePoints       []string        `json:"valuePoints,omitempty"`  // 关键防范点
 	ValueClosing      string          `json:"valueClosing,omitempty"` // 收束寄语
 	ValueSummary      string          `json:"valueSummary,omitempty"` // 完整价值复盘文案（可朗读）
+	PublicClues       []PublicClue    `json:"publicClues,omitempty"`  // 物证板
+	MarksCast         int             `json:"marksCast,omitempty"`
+	MarksNeeded       int             `json:"marksNeeded,omitempty"`
+	SuspicionTally    map[string]int  `json:"suspicionTally,omitempty"` // playerId -> 被标记次数
+	Scores            []PlayerScore   `json:"scores,omitempty"`
 	PhaseDeadlineUnix int64           `json:"phaseDeadlineUnix,omitempty"`
 	CanStart          bool            `json:"canStart"`
 }
@@ -91,9 +99,13 @@ type PublicPlayer struct {
 }
 
 type PrivateView struct {
-	PlayerID       string `json:"playerId"`
-	Role           Role   `json:"role"`
-	SecretCard     string `json:"secretCard"`
-	CharacterName  string `json:"characterName,omitempty"`
-	CharacterLabel string `json:"characterLabel,omitempty"`
+	PlayerID       string      `json:"playerId"`
+	Role           Role        `json:"role"`
+	SecretCard     string      `json:"secretCard"`
+	CharacterName  string      `json:"characterName,omitempty"`
+	CharacterLabel string      `json:"characterLabel,omitempty"`
+	Ability        AbilityKind `json:"ability,omitempty"`
+	AbilityUsed    bool        `json:"abilityUsed,omitempty"`
+	AbilityHint    string      `json:"abilityHint,omitempty"`
+	AuditResult    string      `json:"auditResult,omitempty"`
 }

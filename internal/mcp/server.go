@@ -74,7 +74,7 @@ func (s *Server) Tools() []Tool {
 		},
 		{
 			Name:        "advance_phase",
-			Description: "从播报阶段进入盘问阶段。",
+			Description: "推进阶段：播报→盘问，或物证→怀疑标记。",
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -94,6 +94,34 @@ func (s *Server) Tools() []Tool {
 					"text":      map[string]any{"type": "string"},
 				},
 				"required": []string{"room_code", "player_id", "text"},
+			},
+		},
+		{
+			Name:        "mark_suspect",
+			Description: "怀疑标记阶段：标记你最怀疑的玩家，影响质询名单。",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"room_code":        map[string]any{"type": "string"},
+					"player_id":        map[string]any{"type": "string"},
+					"target_player_id": map[string]any{"type": "string"},
+					"target_name":      map[string]any{"type": "string"},
+				},
+				"required": []string{"room_code", "player_id"},
+			},
+		},
+		{
+			Name:        "use_ability",
+			Description: "发动隐藏技能。audit 需 clue_id；focus 需 target；smoke 无需额外参数。",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"room_code":        map[string]any{"type": "string"},
+					"player_id":        map[string]any{"type": "string"},
+					"clue_id":          map[string]any{"type": "string"},
+					"target_player_id": map[string]any{"type": "string"},
+				},
+				"required": []string{"room_code", "player_id"},
 			},
 		},
 		{
@@ -237,7 +265,15 @@ func (s *Server) Call(name string, args map[string]any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := r.AdvanceFromBriefing(); err != nil {
+		switch r.Snapshot().Phase {
+		case game.PhaseBriefing:
+			err = r.AdvanceFromBriefing()
+		case game.PhaseEvidence:
+			err = r.AdvanceFromEvidence()
+		default:
+			err = game.ErrWrongPhase
+		}
+		if err != nil {
 			return nil, err
 		}
 		return r.Snapshot(), nil
@@ -250,6 +286,34 @@ func (s *Server) Call(name string, args map[string]any) (any, error) {
 			return nil, err
 		}
 		return r.Snapshot(), nil
+	case "mark_suspect":
+		r, err := s.hub.Get(str("room_code"))
+		if err != nil {
+			return nil, err
+		}
+		target := str("target_player_id")
+		if target == "" {
+			if p := r.FindPlayerByName(str("target_name")); p != nil {
+				target = p.ID
+			}
+		}
+		if err := r.MarkSuspect(str("player_id"), target); err != nil {
+			return nil, err
+		}
+		return r.Snapshot(), nil
+	case "use_ability":
+		r, err := s.hub.Get(str("room_code"))
+		if err != nil {
+			return nil, err
+		}
+		if err := r.UseAbility(str("player_id"), str("clue_id"), str("target_player_id")); err != nil {
+			return nil, err
+		}
+		out := map[string]any{"state": r.Snapshot()}
+		if priv, err := r.PrivateView(str("player_id")); err == nil {
+			out["private"] = priv
+		}
+		return out, nil
 	case "submit_cross_answer":
 		r, err := s.hub.Get(str("room_code"))
 		if err != nil {

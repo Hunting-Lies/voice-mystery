@@ -52,6 +52,12 @@ type Room struct {
 	valuePoints    []string
 	valueClosing   string
 	valueSummary   string
+	evidenceClues  []EvidenceClue
+	publicClues    []PublicClue
+	marks          map[string]string // from -> to
+	focusTargetID  string
+	smokeUsed      bool
+	scores         []PlayerScore
 	phaseDeadline  time.Time
 	createdAt      time.Time
 	nextBotActAt   time.Time // 限制机器人出手速度，给真人留操作时间
@@ -68,7 +74,8 @@ func NewRoom(code string, scriptID string) *Room {
 		Phase:     PhaseLobby,
 		Players:   make(map[string]*Player),
 		votes:     make(map[string]string),
-		hostLine:  "欢迎来到《来电疑云》。创建或加入房间，满 3 人后可由任意玩家开始对局。",
+		marks:     make(map[string]string),
+		hostLine:  "欢迎来到《来电疑云》。创建或加入房间，满 3 人后可由任意玩家开始对局。玩法：播报→盘问→物证→怀疑标记→质询→投票。",
 		createdAt: time.Now(),
 	}
 }
@@ -194,6 +201,8 @@ func (r *Room) Start() error {
 		}
 	}
 	r.assignStoryCharactersLocked(scammerID)
+	r.resetEnrichLocked()
+	r.assignAbilitiesLocked()
 
 	r.statements = nil
 	r.votes = make(map[string]string)
@@ -207,7 +216,7 @@ func (r *Room) Start() error {
 	r.valueClosing = ""
 	r.valueSummary = ""
 	r.Phase = PhaseBriefing
-	r.hostLine = r.Script.Briefing
+	r.hostLine = r.Script.Briefing + "\n（本局已发放隐藏技能，请查看秘密身份卡下方提示。）"
 	// 播报阶段不自动跳转：等主持词念完后由玩家/MCP 手动 advance。
 	r.phaseDeadline = time.Time{}
 	return nil
@@ -252,7 +261,7 @@ func (r *Room) SubmitStatement(playerID, text string) error {
 	})
 	r.speakerIdx++
 	if r.speakerIdx >= len(r.order) {
-		return r.enterCrossExamLocked()
+		return r.enterEvidenceLocked()
 	}
 	cur := r.Players[r.order[r.speakerIdx]]
 	r.hostLine = fmt.Sprintf("%s 发言完毕。下一位：%s。", p.Name, cur.Name)
@@ -265,15 +274,16 @@ func (r *Room) enterCrossExamLocked() error {
 	if len(qs) == 0 {
 		qs = []string{"你觉得谁最像骗子？"}
 	}
-	// pick up to 2 distinct alive players
-	targets := append([]string{}, r.order...)
-	shuffle(targets)
 	n := 2
-	if len(targets) < n {
-		n = len(targets)
+	if len(r.order) >= 5 {
+		n = 3
 	}
+	if n > len(r.order) {
+		n = len(r.order)
+	}
+	targets := r.pickCrossTargetsLocked(n)
 	r.crossQuestions = nil
-	for i := 0; i < n; i++ {
+	for i := 0; i < len(targets); i++ {
 		r.crossQuestions = append(r.crossQuestions, CrossQuestion{
 			TargetPlayerID: targets[i],
 			Question:       qs[i%len(qs)],
@@ -281,8 +291,13 @@ func (r *Room) enterCrossExamLocked() error {
 	}
 	r.crossIdx = 0
 	r.Phase = PhaseCrossExam
+	names := make([]string, 0, len(targets))
+	for _, id := range targets {
+		names = append(names, r.Players[id].Name)
+	}
 	t := r.Players[r.crossQuestions[0].TargetPlayerID]
-	r.hostLine = fmt.Sprintf("交叉质询：%s，%s", t.Name, r.crossQuestions[0].Question)
+	r.hostLine = fmt.Sprintf("交叉质询名单（按怀疑热度）：%s。先问 %s：%s",
+		strings.Join(names, "、"), t.Name, r.crossQuestions[0].Question)
 	r.phaseDeadline = time.Now().Add(40 * time.Second)
 	return nil
 }
@@ -402,6 +417,7 @@ func (r *Room) revealLocked() error {
 		}
 	}
 	r.applyValueRecapLocked()
+	r.computeScoresLocked()
 	r.Phase = PhaseEnd
 	r.phaseDeadline = time.Time{}
 	return nil
@@ -468,8 +484,42 @@ func (r *Room) AutoActBots() (changed bool) {
 		if cur != nil && cur.IsBot {
 			text := r.pickBotLine(cur.Role, true)
 			_ = r.submitStatementNoLock(curID, text)
-			// 盘问间隔：兼顾节奏与 TTS 朗读
 			r.nextBotActAt = time.Now().Add(2 * time.Second)
+			return true
+		}
+	case PhaseEvidence:
+		// 骗子机器人可放烟雾弹；阶段推进由玩家点「进入怀疑标记」（与播报一致）
+		for _, id := range r.order {
+			p := r.Players[id]
+			if p == nil || !p.IsBot || p.AbilityUsed || p.Ability != AbilitySmoke {
+				continue
+			}
+			_ = r.useAbilityNoLock(id, "", "")
+			r.nextBotActAt = time.Now().Add(1500 * time.Millisecond)
+			return true
+		}
+	case PhaseMark:
+		for _, id := range r.order {
+			p := r.Players[id]
+			if p == nil || !p.IsBot {
+				continue
+			}
+			if !p.AbilityUsed && p.Ability == AbilityFocus {
+				target := r.botVoteTarget(id)
+				_ = r.useAbilityNoLock(id, "", target)
+				r.nextBotActAt = time.Now().Add(800 * time.Millisecond)
+				return true
+			}
+			if _, ok := r.marks[id]; ok {
+				continue
+			}
+			target := r.botVoteTarget(id)
+			r.marks[id] = target
+			r.hostLine = fmt.Sprintf("已收到怀疑标记 %d/%d。", len(r.marks), len(r.Players))
+			if len(r.marks) >= len(r.Players) {
+				_ = r.enterCrossExamLocked()
+			}
+			r.nextBotActAt = time.Now().Add(1200 * time.Millisecond)
 			return true
 		}
 	case PhaseCrossExam:
@@ -501,6 +551,58 @@ func (r *Room) AutoActBots() (changed bool) {
 	return false
 }
 
+// useAbilityNoLock 供机器人调用；已持锁。
+func (r *Room) useAbilityNoLock(playerID, clueID, targetID string) error {
+	// 临时释放路径：复用 UseAbility 会二次加锁，改为内联最小逻辑
+	p := r.Players[playerID]
+	if p == nil || p.AbilityUsed {
+		return errors.New("技能不可用")
+	}
+	switch p.Ability {
+	case AbilitySmoke:
+		if r.Phase != PhaseEvidence || r.smokeUsed {
+			return errors.New("烟雾弹不可用")
+		}
+		fake := PublicClue{
+			ID: "smoke-fake", Title: "临时补充",
+			Text: "有内部消息称：只要配合转账到安全账户，损失今晚就能追回。",
+			Planted: true, Revealed: true,
+		}
+		r.publicClues = append(r.publicClues, fake)
+		r.smokeUsed = true
+		p.AbilityUsed = true
+		r.hostLine = "系统追加一条「临时补充」物证（真伪未知）。" + fake.Text
+	case AbilityFocus:
+		to := r.Players[targetID]
+		if to == nil || targetID == playerID {
+			return ErrInvalidTarget
+		}
+		r.focusTargetID = targetID
+		p.AbilityUsed = true
+		r.hostLine = fmt.Sprintf("%s 发动【重点盯防】：%s 将被优先质询。", p.Name, to.Name)
+	case AbilityAudit:
+		if clueID == "" && len(r.evidenceClues) > 0 {
+			clueID = r.evidenceClues[0].ID
+		}
+		for i := range r.evidenceClues {
+			c := &r.evidenceClues[i]
+			if c.ID != clueID {
+				continue
+			}
+			if c.IsTrue {
+				p.AuditResult = fmt.Sprintf("鉴定结果：【%s】为真线索。", c.Title)
+			} else {
+				p.AuditResult = fmt.Sprintf("鉴定结果：【%s】为假线索。", c.Title)
+			}
+			p.AbilityUsed = true
+			r.hostLine = fmt.Sprintf("%s 使用了【物证鉴定】（结果仅本人可见）。", p.Name)
+			return nil
+		}
+		return errors.New("无效物证")
+	}
+	return nil
+}
+
 func (r *Room) advanceBriefingNoLock() error {
 	r.Phase = PhaseStatement
 	r.speakerIdx = 0
@@ -515,16 +617,12 @@ func (r *Room) submitStatementNoLock(playerID, text string) error {
 	r.statements = append(r.statements, Statement{PlayerID: playerID, Name: p.Name, Text: text, At: time.Now()})
 	r.speakerIdx++
 	if r.speakerIdx >= len(r.order) {
-		return r.enterCrossExamLockedUnsafe()
+		return r.enterEvidenceLocked()
 	}
 	cur := r.Players[r.order[r.speakerIdx]]
 	r.hostLine = fmt.Sprintf("%s 发言完毕。下一位：%s。", p.Name, cur.Name)
 	r.phaseDeadline = time.Now().Add(45 * time.Second)
 	return nil
-}
-
-func (r *Room) enterCrossExamLockedUnsafe() error {
-	return r.enterCrossExamLocked()
 }
 
 func (r *Room) submitCrossNoLock(playerID, text string) error {
@@ -649,22 +747,30 @@ func (r *Room) PrivateView(playerID string) (*PrivateView, error) {
 		return nil, ErrPlayerNotFound
 	}
 	if r.Phase == PhaseLobby {
-		return &PrivateView{PlayerID: playerID, Role: "", SecretCard: "对局开始后将下发你的秘密身份卡。"}, nil
-	}
-	if p.characterCard != "" {
-		return &PrivateView{
-			PlayerID:       playerID,
-			Role:           p.Role,
-			SecretCard:     p.characterCard,
-			CharacterName:  p.characterName,
-			CharacterLabel: p.characterLabel,
-		}, nil
+		return &PrivateView{PlayerID: playerID, Role: "", SecretCard: "对局开始后将下发你的秘密身份卡与隐藏技能。"}, nil
 	}
 	card := r.Script.CitizenCard
 	if p.Role == RoleScammer {
 		card = r.Script.ScammerCard
 	}
-	return &PrivateView{PlayerID: playerID, Role: p.Role, SecretCard: card}, nil
+	view := &PrivateView{
+		PlayerID:    playerID,
+		Role:        p.Role,
+		SecretCard:  card,
+		Ability:     p.Ability,
+		AbilityUsed: p.AbilityUsed,
+		AbilityHint: abilityHint(p.Ability),
+		AuditResult: p.AuditResult,
+	}
+	if p.characterCard != "" {
+		view.SecretCard = p.characterCard
+		view.CharacterName = p.characterName
+		view.CharacterLabel = p.characterLabel
+	}
+	if p.AbilityUsed {
+		view.AbilityHint = view.AbilityHint + "（已使用）"
+	}
+	return view, nil
 }
 
 func (r *Room) Snapshot() PublicState {
@@ -689,6 +795,11 @@ func (r *Room) Snapshot() PublicState {
 	}
 	if r.Phase == PhaseCrossExam && r.crossIdx < len(r.crossQuestions) {
 		curSpeaker = r.crossQuestions[r.crossIdx].TargetPlayerID
+	}
+
+	tally := map[string]int{}
+	for _, to := range r.marks {
+		tally[to]++
 	}
 
 	st := PublicState{
@@ -717,6 +828,11 @@ func (r *Room) Snapshot() PublicState {
 		ValuePoints:       append([]string{}, r.valuePoints...),
 		ValueClosing:      r.valueClosing,
 		ValueSummary:      r.valueSummary,
+		PublicClues:       append([]PublicClue{}, r.publicClues...),
+		MarksCast:         len(r.marks),
+		MarksNeeded:       len(r.Players),
+		SuspicionTally:    tally,
+		Scores:            append([]PlayerScore{}, r.scores...),
 		PhaseDeadlineUnix: deadline,
 		CanStart:          r.Phase == PhaseLobby && len(r.Players) >= MinPlayers,
 	}

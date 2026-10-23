@@ -41,6 +41,9 @@ type CallScript struct {
 	Theme       string   // 如：银行反诈宣传 · 安全教育
 	ValuePoints []string // 关键防范点
 	Closing     string   // 收束寄语
+
+	// 物证板（盘问后公开，真伪混杂；真伪仅服务端持有）
+	EvidenceClues []EvidenceClue
 }
 
 // ScriptMeta 供大厅展示，不含剧透身份卡。
@@ -53,6 +56,7 @@ type ScriptMeta struct {
 
 const ScriptMidnightBank = "midnight-bank"
 const ScriptBlackGold = "black-gold-antifraud"
+// 其余剧本 ID 见 script_extra.go
 
 func (s CallScript) votePrompt() string {
 	if t := strings.TrimSpace(s.VotePrompt); t != "" {
@@ -147,11 +151,22 @@ func ScriptByID(id string) (CallScript, error) {
 	return s, nil
 }
 
-var scriptOrder = []string{ScriptMidnightBank, ScriptBlackGold}
+var scriptOrder = []string{
+	ScriptMidnightBank,
+	ScriptBlackGold,
+	ScriptRefundCourier,
+	ScriptPigButcher,
+	ScriptAIVoiceKin,
+	ScriptCampusPartTime,
+}
 
 var scriptRegistry = map[string]CallScript{
-	ScriptMidnightBank: scriptMidnightBank(),
-	ScriptBlackGold:    scriptBlackGold(),
+	ScriptMidnightBank:   scriptMidnightBank(),
+	ScriptBlackGold:      scriptBlackGold(),
+	ScriptRefundCourier:  scriptRefundCourier(),
+	ScriptPigButcher:     scriptPigButcher(),
+	ScriptAIVoiceKin:     scriptAIVoiceKin(),
+	ScriptCampusPartTime: scriptCampusPartTime(),
 }
 
 func scriptMidnightBank() CallScript {
@@ -219,5 +234,12 @@ func scriptMidnightBank() CallScript {
 			"收到异常提醒时：不转账、不泄密、不远程操控；可拨打银行官方客服或报警电话核实。",
 		},
 		Closing: "《来电疑云》用一局游戏演练真实骗局。把今晚记住的防范点带回家、带进单位：识破一通电话，就可能守住一笔积蓄。",
+		EvidenceClues: []EvidenceClue{
+			{ID: "mb1", Title: "安全账户", Text: "正规银行不会要求客户把资金转到所谓「安全账户」。", IsTrue: true},
+			{ID: "mb2", Title: "验证码", Text: "任何索要短信验证码的来电都应直接挂断。", IsTrue: true},
+			{ID: "mb3", Title: "工号 HG-9281", Text: "电话报工号即可证明对方是官方客服。", IsTrue: false},
+			{ID: "mb4", Title: "系统升级", Text: "「今晚只能电话处理」是常见催促话术，真实业务可挂断后走官方渠道。", IsTrue: true},
+			{ID: "mb5", Title: "跨境三万八", Text: "只要金额对得上短信，就可以按来电指示操作。", IsTrue: false},
+		},
 	}
 }

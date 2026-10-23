@@ -86,6 +86,16 @@
                 <button id="btnSubmitSpeak" class="btn primary" type="button">提交发言</button>
               </div>
             </div>
+            <div id="evidenceActions" class="hidden">
+              <p class="label">物证板已更新，可发动技能后继续</p>
+              <div id="abilityBar" class="cta-row"></div>
+              <button id="btnAdvanceEvidence" class="btn primary" type="button">进入怀疑标记</button>
+            </div>
+            <div id="markActions" class="hidden">
+              <label class="label">怀疑标记：点名你最怀疑的人</label>
+              <div id="markTargets" class="vote-grid"></div>
+              <div id="abilityBarMark" class="cta-row" style="margin-top:0.6rem"></div>
+            </div>
             <div id="voteActions" class="hidden">
               <label class="label" id="voteLabel">指认来电骗子</label>
               <div id="voteTargets" class="vote-grid"></div>
@@ -93,6 +103,16 @@
             <div id="endActions" class="hidden">
               <button id="btnReplay" class="btn primary">再来一局</button>
             </div>
+          </div>
+
+          <div id="clueBoard" class="card-block clue-board hidden">
+            <h2>物证板</h2>
+            <ul id="clueList" class="clue-list"></ul>
+          </div>
+
+          <div id="scoreBoard" class="card-block score-board hidden">
+            <h2>本局评分</h2>
+            <ul id="scoreList" class="score-list"></ul>
           </div>
 
           <div id="valueRecap" class="card-block value-recap hidden">
