@@ -7,8 +7,16 @@
 ## 快速开始
 
 ```bash
-cd lai-dian-yi-yun
+cd /Users/zengzhaoxia/Work/Code/Github/Fork/voice-mystery
 make tidy
+make run
+```
+
+启用灵矽同款 CosyVoice 音色（推荐）：
+
+```bash
+export DASHSCOPE_API_KEY=sk-你的百炼密钥
+# 可选：COSYVOICE_MODEL=cosyvoice-v2（默认，与 long*_v2 音色匹配）
 make run
 ```
 
@@ -17,7 +25,11 @@ make run
 - **单人演示**：点「单人演示（补机器人）」→「开始游戏」→ 按阶段发言/投票  
 - **多人**：一人创建房间，其他人输入房间号加入（建议 3–6 人）  
 - **语音输入**：按住说话 → 本地 Whisper 识别；也可直接打字  
-- **主持播报**：浏览器 TTS 朗读 `hostLine`（对接灵矽后改由设备 TTS 播报）
+- **音色播报**（配置了 `DASHSCOPE_API_KEY`）：
+  - 主持 → **豪放可爱女**（`longxian_v2`）
+  - 玩家轮换 → **温暖元气男** / **实力歌手男** / **智慧青年男**
+  - 与灵矽仓库 `TTS_AliyunDoubleStreamTTS` 种子音色一致  
+- 未配置密钥时自动回退浏览器 TTS
 
 无界面跑通一局：
 
@@ -38,6 +50,7 @@ make demo
 | **房间管理** | `internal/room` | 多房间实例、机器人补齐与自动推进 |
 | **HTTP / WebSocket API** | `internal/api` | Web 演示端同步状态；亦可被中间层转发 |
 | **本地 ASR（演示用）** | `internal/api/asr.go` + `scripts/asr_transcribe.py` | Web 端按住说话的转写；正式环境可换成灵矽 ASR |
+| **CosyVoice TTS（演示用）** | `internal/tts` + `/api/tts` | 灵矽同款四音色；需 `DASHSCOPE_API_KEY` |
 | **Web 客户端** | `web/` | 无设备时的完整可玩演示（含主持朗读、投票 UI） |
 
 ### 2. 灵矽平台侧应对齐的能力（xrobotd / linxdv0）
@@ -52,7 +65,7 @@ make demo
 | **自定义 MCP** | 把本服务的 `/mcp/call` 配成智能体工具后端 |
 | **APP State + 动态工具**（可选增强） | 按阶段禁用工具（如非投票阶段禁用 `vote`），减少模型误调 |
 | **声纹 V2**（可选加分） | 同设备多人时区分说话人，映射到 `player_id` |
-| **多音色 / 音色复刻**（可选加分） | 「骗子来电」播报用独立音色增强沉浸感 |
+| **多音色 / 音色复刻**（可选加分） | Demo 已用豪放可爱女 + 三男声；正式可由设备 TTS 播报 |
 
 > 说明：灵矽仓库中的 `app/meeting`（会议纪要）是沉浸录音场景，**不是**本游戏的多人房间底座；本游戏房间状态由本服务 MCP 维护。
 

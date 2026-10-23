@@ -62,12 +62,15 @@
               <div class="caller">未知来电 · 星河银行？</div>
               <div class="host-line" id="hostLine">…</div>
             </div>
-            <button id="btnSpeakHost" class="btn tiny">朗读主持词</button>
+            <div class="phone-actions">
+              <button id="btnSpeakHost" class="btn tiny" type="button">朗读主持词</button>
+              <button id="btnSkipHost" class="btn tiny ghost" type="button">跳过</button>
+            </div>
           </div>
 
           <div class="action" id="actionPanel">
             <div id="briefingActions" class="hidden">
-              <button id="btnAdvance" class="btn primary">听完了，进入盘问</button>
+              <button id="btnAdvance" class="btn primary" type="button">听完了，进入盘问</button>
             </div>
             <div id="speakActions" class="hidden">
               <label class="label">你的发言</label>

@@ -37,6 +37,12 @@ func main() {
 	fmt.Printf("  Web  : http://127.0.0.1%s/\n", *addr)
 	fmt.Printf("  MCP  : http://127.0.0.1%s/mcp/tools\n", *addr)
 	fmt.Printf("  ASR  : http://127.0.0.1%s/api/asr  (本地 Whisper)\n", *addr)
+	fmt.Printf("  TTS  : http://127.0.0.1%s/api/tts/status\n", *addr)
+	if srv.TTSEnabled() {
+		fmt.Printf("  音色 : 灵矽 CosyVoice 已启用（豪放可爱女 + 三男声）\n")
+	} else {
+		fmt.Printf("  音色 : 未设置 DASHSCOPE_API_KEY，Web Demo 回退浏览器 TTS\n")
+	}
 	fmt.Printf("  Health: http://127.0.0.1%s/api/health\n", *addr)
 	log.Fatal(http.ListenAndServe(*addr, handler))
 }
