@@ -68,6 +68,13 @@ func scriptBlackGold() CallScript {
 			"熟悉「冻结、验资、安全账户」整套话术却自称受害者，往往是话术组伪装。",
 		},
 		Closing: "本案串联虚假订单、冒充公检法、刷单返利与虚假投资四类高发电诈。把证据链思维带回日常：不转账、不泄密、不出借银行卡。",
+		EvidenceClues: []EvidenceClue{
+			{ID: "bg1", Title: "安全账户", Text: "公检法机关没有「安全监管账户」，不会电话要求转账验资。", IsTrue: true},
+			{ID: "bg2", Title: "刷单返利", Text: "小额试单正常返利后加码，是典型刷单诈骗诱饵。", IsTrue: true},
+			{ID: "bg3", Title: "跑分特征", Text: "多卡短时高频异地转账，符合跑分洗钱特征。", IsTrue: true},
+			{ID: "bg4", Title: "话术熟练度", Text: "自称受害者却对冻结、验资流程极其熟练，更像话术组伪装。", IsTrue: true},
+			{ID: "bg5", Title: "误导", Text: "只要对方自称反诈中心，配合转账就能保住资金。", IsTrue: false},
+		},
 		BotStatements: map[Role][]string{
 			RoleCitizen: {
 				"线索 C 里林婉清对安全账户流程说得太顺，不像普通受害人，我怀疑话术组。",

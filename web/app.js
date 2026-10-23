@@ -57,6 +57,8 @@
     lobby: "大厅",
     briefing: "来电播报",
     statement: "盘问发言",
+    evidence: "物证播报",
+    mark: "怀疑标记",
     cross_exam: "交叉质询",
     vote: "投票指认",
     reveal: "揭晓",
@@ -120,7 +122,11 @@
 
   $("btnAdvance").onclick = async () => {
     clearTTS();
-    await advanceFromBriefing();
+    await advancePhase();
+  };
+  $("btnAdvanceEvidence").onclick = async () => {
+    clearTTS();
+    await advancePhase();
   };
 
   $("btnSubmitSpeak").onclick = (e) => {
@@ -136,15 +142,16 @@
   };
   $("btnSkipHost").onclick = async () => {
     clearTTS();
-    // 播报阶段：跳过朗读并直接进入盘问；其他阶段仅打断当前播报
-    if (state.snapshot?.phase === "briefing") {
-      await advanceFromBriefing();
+    // 播报/物证：跳过朗读并推进；其他阶段仅打断当前播报
+    if (state.snapshot?.phase === "briefing" || state.snapshot?.phase === "evidence") {
+      await advancePhase();
     }
   };
 
-  async function advanceFromBriefing() {
+  async function advancePhase() {
     if (!state.roomCode) return;
-    if (state.snapshot?.phase !== "briefing") return;
+    const ph = state.snapshot?.phase;
+    if (ph !== "briefing" && ph !== "evidence") return;
     await api("POST", `/api/rooms/${state.roomCode}/advance`, {});
   }
   $("btnReplay").onclick = () => location.reload();
@@ -281,13 +288,15 @@
 
       if (snap.phase === "briefing") {
         enqueueTTS({ text: snap.hostLine, profileKey: HOST_VOICE_KEY, forceClear: true });
-      } else if (["statement", "cross_exam", "vote", "end"].includes(snap.phase) && snap.hostLine.length < 120) {
+      } else if (["statement", "evidence", "mark", "cross_exam", "vote", "end"].includes(snap.phase) && snap.hostLine.length < 160) {
         // 不 forceClear：与刚入队的玩家发言串行，避免「发言完毕」盖掉正文
         enqueueTTS({
           text: snap.hostLine,
           profileKey: HOST_VOICE_KEY,
           forceClear: false,
         });
+      } else if (snap.phase === "evidence" && snap.hostLine) {
+        enqueueTTS({ text: snap.hostLine, profileKey: HOST_VOICE_KEY, forceClear: false });
       }
     }
 
@@ -331,7 +340,10 @@
       } else {
         $("secretRole").textContent = roleMap[priv.role] || priv.role || "未分配";
       }
-      $("secretCard").textContent = priv.secretCard || "";
+      let card = priv.secretCard || "";
+      if (priv.abilityHint) card += `\n\n${priv.abilityHint}`;
+      if (priv.auditResult) card += `\n\n${priv.auditResult}`;
+      $("secretCard").textContent = card;
     } else {
       $("secretRole").textContent = "对局开始后揭晓";
       $("secretCard").textContent = "请保守你的秘密身份卡，不要让它直接出现在公开发言里。";
@@ -341,6 +353,8 @@
     $("btnStart").disabled = !snap.canStart;
 
     $("briefingActions").classList.toggle("hidden", snap.phase !== "briefing");
+    $("evidenceActions").classList.toggle("hidden", snap.phase !== "evidence");
+    $("markActions").classList.toggle("hidden", snap.phase !== "mark");
     updateAdvanceButton();
 
     const myTurn = snap.currentSpeakerId === state.playerId;
@@ -359,7 +373,32 @@
 
     $("voteActions").classList.toggle("hidden", snap.phase !== "vote");
     $("endActions").classList.toggle("hidden", snap.phase !== "end");
+    renderClueBoard(snap);
+    renderScoreBoard(snap);
     renderValueRecap(snap);
+    renderAbilityBars(snap);
+
+    if (snap.phase === "mark") {
+      const grid = $("markTargets");
+      grid.innerHTML = "";
+      snap.players.forEach((p) => {
+        if (p.id === state.playerId) return;
+        const heat = (snap.suspicionTally && snap.suspicionTally[p.id]) || 0;
+        const b = document.createElement("button");
+        b.className = "btn ghost";
+        b.type = "button";
+        b.textContent = heat ? `${p.name}（${heat}）` : p.name;
+        b.onclick = async () => {
+          try {
+            await api("POST", `/api/rooms/${state.roomCode}/mark`, {
+              playerId: state.playerId,
+              targetId: p.id,
+            });
+          } catch (_) { /* ignore */ }
+        };
+        grid.appendChild(b);
+      });
+    }
 
     if (snap.phase === "vote") {
       const grid = $("voteTargets");
@@ -387,6 +426,9 @@
     (snap.statements || []).forEach((s) => {
       parts.push(`<div class="item"><div class="name">${escapeHtml(s.name)} · 盘问</div>${escapeHtml(s.text)}</div>`);
     });
+    (snap.publicClues || []).forEach((c) => {
+      parts.push(`<div class="item"><div class="name">物证 · ${escapeHtml(c.title)}</div>${escapeHtml(c.text)}</div>`);
+    });
     (snap.crossQuestions || []).forEach((q) => {
       const target = snap.players.find((p) => p.id === q.targetPlayerId);
       parts.push(`<div class="item"><div class="name">质询 ${escapeHtml(target?.name || "?")}</div>Q: ${escapeHtml(q.question)}${q.answer ? `<br/>A: ${escapeHtml(q.answer)}` : ""}</div>`);
@@ -398,6 +440,94 @@
       }
     }
     log.innerHTML = parts.join("") || "<div class='item'>等待对局开始…</div>";
+  }
+
+  function renderClueBoard(snap) {
+    const box = $("clueBoard");
+    if (!box) return;
+    const clues = snap.publicClues || [];
+    const show = clues.length > 0 && ["evidence", "mark", "cross_exam", "vote", "end"].includes(snap.phase);
+    box.classList.toggle("hidden", !show);
+    if (!show) return;
+    const ul = $("clueList");
+    ul.innerHTML = "";
+    clues.forEach((c) => {
+      const li = document.createElement("li");
+      li.innerHTML = `<span class="clue-title">${escapeHtml(c.title)}</span>${escapeHtml(c.text)}`;
+      ul.appendChild(li);
+    });
+  }
+
+  function renderScoreBoard(snap) {
+    const box = $("scoreBoard");
+    if (!box) return;
+    const scores = snap.scores || [];
+    const show = snap.phase === "end" && scores.length > 0;
+    box.classList.toggle("hidden", !show);
+    if (!show) return;
+    const ul = $("scoreList");
+    ul.innerHTML = "";
+    scores.forEach((s) => {
+      const li = document.createElement("li");
+      li.innerHTML = `<span class="score-n">${s.score}分</span> ${escapeHtml(s.name)} — ${escapeHtml(s.note || "")}`;
+      ul.appendChild(li);
+    });
+  }
+
+  function renderAbilityBars(snap) {
+    const priv = state.private;
+    const canUse = priv && !priv.abilityUsed && priv.ability &&
+      ((snap.phase === "evidence" && (priv.ability === "audit" || priv.ability === "smoke")) ||
+       (snap.phase === "mark" && (priv.ability === "focus" || priv.ability === "audit")));
+    fillAbilityBar($("abilityBar"), snap, canUse && snap.phase === "evidence");
+    fillAbilityBar($("abilityBarMark"), snap, canUse && snap.phase === "mark");
+  }
+
+  function fillAbilityBar(bar, snap, enabled) {
+    if (!bar) return;
+    bar.innerHTML = "";
+    if (!enabled || !state.private?.ability) return;
+    const ability = state.private.ability;
+    if (ability === "smoke") {
+      const b = document.createElement("button");
+      b.className = "btn accent";
+      b.type = "button";
+      b.textContent = "发动【烟雾弹】";
+      b.onclick = () => useAbility({});
+      bar.appendChild(b);
+    } else if (ability === "audit") {
+      (snap.publicClues || []).forEach((c) => {
+        if (c.planted) return;
+        const b = document.createElement("button");
+        b.className = "btn ghost";
+        b.type = "button";
+        b.textContent = `鉴定「${c.title}」`;
+        b.onclick = () => useAbility({ clueId: c.id });
+        bar.appendChild(b);
+      });
+    } else if (ability === "focus") {
+      (snap.players || []).forEach((p) => {
+        if (p.id === state.playerId) return;
+        const b = document.createElement("button");
+        b.className = "btn ghost";
+        b.type = "button";
+        b.textContent = `盯防 ${p.name}`;
+        b.onclick = () => useAbility({ targetId: p.id });
+        bar.appendChild(b);
+      });
+    }
+  }
+
+  async function useAbility({ clueId, targetId } = {}) {
+    try {
+      const res = await api("POST", `/api/rooms/${state.roomCode}/ability`, {
+        playerId: state.playerId,
+        clueId: clueId || "",
+        targetId: targetId || "",
+      });
+      if (res.private) state.private = res.private;
+      if (res.state) render(res.state);
+    } catch (_) { /* ignore */ }
   }
 
   function renderValueRecap(snap) {

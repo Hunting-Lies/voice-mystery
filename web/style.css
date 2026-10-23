@@ -271,6 +271,33 @@ input:focus, textarea:focus { border-color: var(--accent); }
 }
 .vote-grid button { width: 100%; border-radius: 12px; }
 
+.clue-board, .score-board {
+  margin-top: 1rem;
+}
+.clue-list, .score-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.clue-list li, .score-list li {
+  padding: 0.55rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  line-height: 1.5;
+  color: #c9d8e4;
+  font-size: 0.92rem;
+}
+.clue-list .clue-title {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  margin-right: 0.4rem;
+}
+.score-list .score-n {
+  color: var(--warn);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
 .value-recap {
   margin-top: 1rem;
   border-color: rgba(62, 207, 191, 0.28);

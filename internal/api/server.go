@@ -207,7 +207,16 @@ func (s *Server) handleRoomAction(w http.ResponseWriter, r *http.Request) {
 		s.broadcastRoom(code)
 		writeJSON(w, http.StatusOK, roomObj.Snapshot())
 	case "advance":
-		if err := roomObj.AdvanceFromBriefing(); err != nil {
+		var err error
+		switch roomObj.Snapshot().Phase {
+		case game.PhaseBriefing:
+			err = roomObj.AdvanceFromBriefing()
+		case game.PhaseEvidence:
+			err = roomObj.AdvanceFromEvidence()
+		default:
+			err = game.ErrWrongPhase
+		}
+		if err != nil {
 			writeErr(w, err)
 			return
 		}
@@ -227,6 +236,21 @@ func (s *Server) handleRoomAction(w http.ResponseWriter, r *http.Request) {
 		}
 		s.broadcastRoom(code)
 		writeJSON(w, http.StatusOK, roomObj.Snapshot())
+	case "mark":
+		if err := roomObj.MarkSuspect(body["playerId"], body["targetId"]); err != nil {
+			writeErr(w, err)
+			return
+		}
+		s.broadcastRoom(code)
+		writeJSON(w, http.StatusOK, roomObj.Snapshot())
+	case "ability":
+		if err := roomObj.UseAbility(body["playerId"], body["clueId"], body["targetId"]); err != nil {
+			writeErr(w, err)
+			return
+		}
+		s.broadcastRoom(code)
+		priv, _ := roomObj.PrivateView(body["playerId"])
+		writeJSON(w, http.StatusOK, map[string]any{"state": roomObj.Snapshot(), "private": priv})
 	case "vote":
 		if err := roomObj.CastVote(body["playerId"], body["targetId"]); err != nil {
 			writeErr(w, err)
@@ -317,7 +341,14 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		case "start":
 			_ = roomObj.Start()
 		case "advance":
-			_ = roomObj.AdvanceFromBriefing()
+			switch roomObj.Snapshot().Phase {
+			case game.PhaseBriefing:
+				_ = roomObj.AdvanceFromBriefing()
+			case game.PhaseEvidence:
+				_ = roomObj.AdvanceFromEvidence()
+			}
+		case "mark":
+			_ = roomObj.MarkSuspect(playerID, msg.TargetID)
 		case "fill_bots":
 			_, _ = roomObj.FillBots(game.MinPlayers)
 		case "ping":

@@ -30,12 +30,12 @@ curl -sf -X POST "$BASE/api/rooms/$CODE/start" >/dev/null
 curl -sf -X POST "$BASE/api/rooms/$CODE/advance" >/dev/null
 
 echo "==> 自动推进至结算（人类回合用脚本代打）"
-for i in $(seq 1 40); do
+for i in $(seq 1 60); do
   STATE=$(curl -sf "$BASE/api/rooms/$CODE")
   PHASE=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["phase"])' <<<"$STATE")
   echo "  [$i] phase=$PHASE"
   if [[ "$PHASE" == "end" ]]; then
-    python3 -c 'import json,sys; s=json.load(sys.stdin); print("胜方:", s.get("winner"), "| 骗子:", s.get("revealedScammer")); print(s.get("hostLine"))' <<<"$STATE"
+    python3 -c 'import json,sys; s=json.load(sys.stdin); print("胜方:", s.get("winner"), "| 骗子:", s.get("revealedScammer")); print("物证数:", len(s.get("publicClues") or [])); print("评分人数:", len(s.get("scores") or [])); print(s.get("hostLine"))' <<<"$STATE"
     break
   fi
   SPEAKER=$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("currentSpeakerId") or "")' <<<"$STATE")
@@ -47,6 +47,14 @@ for i in $(seq 1 40); do
       curl -sf -X POST "$BASE/api/rooms/$CODE/cross" -H 'Content-Type: application/json' \
         -d "{\"playerId\":\"$PID_HUMAN\",\"text\":\"因为正规流程不会要验证码。\"}" >/dev/null
     fi
+  fi
+  if [[ "$PHASE" == "evidence" ]]; then
+    curl -sf -X POST "$BASE/api/rooms/$CODE/advance" >/dev/null || true
+  fi
+  if [[ "$PHASE" == "mark" ]]; then
+    TARGET=$(python3 -c 'import json,sys; s=json.load(sys.stdin); print([p["id"] for p in s["players"] if p["id"]!="'"$PID_HUMAN"'"][0])' <<<"$STATE")
+    curl -sf -X POST "$BASE/api/rooms/$CODE/mark" -H 'Content-Type: application/json' \
+      -d "{\"playerId\":\"$PID_HUMAN\",\"targetId\":\"$TARGET\"}" >/dev/null || true
   fi
   if [[ "$PHASE" == "vote" ]]; then
     TARGET=$(python3 -c 'import json,sys; s=json.load(sys.stdin); print([p["id"] for p in s["players"] if p["id"]!="'"$PID_HUMAN"'"][0])' <<<"$STATE")
