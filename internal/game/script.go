@@ -1,19 +1,160 @@
 package game
 
+import (
+	"fmt"
+	"strings"
+)
+
+// StoryCharacter 剧本固定角色（如黑金公司案五人），开局随机分给玩家。
+type StoryCharacter struct {
+	Name       string
+	Label      string // 如「受害者·餐饮店主」
+	SecretCard string
+	IsScammer  bool   // 本局中需被指认的隐藏角色（仅一名）
+}
+
 // CallScript 是一局固定剧本：真线索与假线索混在「来电」里，骗子持有完整谎言剧本。
 type CallScript struct {
-	Title           string
-	Briefing        string
+	ID          string
+	Title       string
+	Synopsis    string // 选关卡片上的短梗概
+	CallerHint  string // 来电界面副标题
+	Briefing    string
 	CitizenCard     string
 	ScammerCard     string
 	CrossQuestions  []string
 	BotStatements   map[Role][]string
 	BotCrossAnswers map[Role][]string
+	BotNames        []string // 补机器人时优先使用的昵称
+	VoteLabel       string   // Web 投票区标题
+	CitizenRoleLabel string
+	ScammerRoleLabel string
+	VotePrompt        string
+	StatementOpenFmt  string // 盘问开场，含一个 %s（玩家名）
+	RevealTieFmt      string // %s 隐藏嫌疑人名
+	RevealCitizensWinFmt string // %s 隐藏嫌疑人名
+	RevealScammerWinFmt  string // %s 被误投者, %s 隐藏嫌疑人名
+	Epilogue          string
+	Characters        []StoryCharacter // 非空时按角色发身份卡，替代 CitizenCard/ScammerCard
+}
+
+// ScriptMeta 供大厅展示，不含剧透身份卡。
+type ScriptMeta struct {
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	Synopsis   string `json:"synopsis"`
+	CallerHint string `json:"callerHint"`
+}
+
+const ScriptMidnightBank = "midnight-bank"
+const ScriptBlackGold = "black-gold-antifraud"
+
+func (s CallScript) votePrompt() string {
+	if t := strings.TrimSpace(s.VotePrompt); t != "" {
+		return t
+	}
+	return "投票阶段：请投出你认为的「来电骗子」。每人一票，不能弃权。"
+}
+
+func (s CallScript) statementOpen(name string) string {
+	if t := strings.TrimSpace(s.StatementOpenFmt); t != "" {
+		return fmt.Sprintf(t, name)
+	}
+	return fmt.Sprintf("盘问开始。请 %s 先发言：你听到了什么？你信哪一句？", name)
+}
+
+func (s CallScript) revealTie(scammerName string) string {
+	if t := strings.TrimSpace(s.RevealTieFmt); t != "" {
+		return fmt.Sprintf(t, scammerName)
+	}
+	return fmt.Sprintf("平票！骗子逃脱。真正的来电骗子是 %s。", scammerName)
+}
+
+func (s CallScript) revealCitizensWin(scammerName string) string {
+	if t := strings.TrimSpace(s.RevealCitizensWinFmt); t != "" {
+		return fmt.Sprintf(t, scammerName)
+	}
+	return fmt.Sprintf("投票命中！%s 就是来电骗子。市民胜利。", scammerName)
+}
+
+func (s CallScript) revealScammerWin(accusedName, scammerName string) string {
+	if t := strings.TrimSpace(s.RevealScammerWinFmt); t != "" {
+		return fmt.Sprintf(t, accusedName, scammerName)
+	}
+	return fmt.Sprintf("投错了！大家票给了 %s，真正的骗子是 %s。骗子胜利。", accusedName, scammerName)
+}
+
+func (s CallScript) voteLabel() string {
+	if t := strings.TrimSpace(s.VoteLabel); t != "" {
+		return t
+	}
+	return "指认来电骗子"
+}
+
+func (s CallScript) citizenRoleLabel() string {
+	if t := strings.TrimSpace(s.CitizenRoleLabel); t != "" {
+		return t
+	}
+	return "市民"
+}
+
+func (s CallScript) scammerRoleLabel() string {
+	if t := strings.TrimSpace(s.ScammerRoleLabel); t != "" {
+		return t
+	}
+	return "来电骗子（隐藏）"
+}
+
+func DefaultScriptID() string {
+	return ScriptMidnightBank
 }
 
 func DefaultScript() CallScript {
+	s, _ := ScriptByID(DefaultScriptID())
+	return s
+}
+
+func ScriptMetas() []ScriptMeta {
+	out := make([]ScriptMeta, 0, len(scriptRegistry))
+	for _, id := range scriptOrder {
+		s, ok := scriptRegistry[id]
+		if !ok {
+			continue
+		}
+		out = append(out, ScriptMeta{
+			ID:         s.ID,
+			Title:      s.Title,
+			Synopsis:   s.Synopsis,
+			CallerHint: s.CallerHint,
+		})
+	}
+	return out
+}
+
+func ScriptByID(id string) (CallScript, error) {
+	if id == "" {
+		id = DefaultScriptID()
+	}
+	s, ok := scriptRegistry[id]
+	if !ok {
+		return CallScript{}, fmt.Errorf("未知剧本: %s", id)
+	}
+	return s, nil
+}
+
+var scriptOrder = []string{ScriptMidnightBank, ScriptBlackGold}
+
+var scriptRegistry = map[string]CallScript{
+	ScriptMidnightBank: scriptMidnightBank(),
+	ScriptBlackGold:    scriptBlackGold(),
+}
+
+func scriptMidnightBank() CallScript {
 	return CallScript{
-		Title: "午夜银行来电",
+		ID:         ScriptMidnightBank,
+		Title:      "午夜银行来电",
+		Synopsis:   "自称星河银行风控的深夜来电，跨境异常、安全账户与验证码——谁在圆谎？",
+		CallerHint: "未知来电 · 星河银行？",
 		Briefing: `总台播报：刚才有一通自称「星河银行风控中心」的来电。
 来电内容摘要如下——请仔细听，其中混有真假信息：
 一、对方称你的账户今日出现一笔异常跨境转账，金额约三万八。

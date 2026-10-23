@@ -80,6 +80,33 @@ body {
   margin: 0.4rem 0 1rem;
 }
 .lead { color: var(--muted); font-size: 1.1rem; max-width: 34rem; }
+.story-block { margin: 1.5rem 0 0.25rem; }
+.story-block .label { margin: 0 0 0.65rem; color: var(--muted); font-size: 0.85rem; letter-spacing: 0.08em; }
+.story-list { display: flex; flex-direction: column; gap: 0.65rem; max-width: 36rem; }
+.story-card {
+  text-align: left;
+  border: 1px solid var(--line);
+  background: rgba(4, 14, 22, 0.55);
+  border-radius: 14px;
+  padding: 0.95rem 1.1rem;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.story-card:hover { border-color: rgba(62, 207, 191, 0.45); }
+.story-card.selected {
+  border-color: var(--accent);
+  background: rgba(62, 207, 191, 0.08);
+  box-shadow: 0 0 0 1px rgba(62, 207, 191, 0.15);
+}
+.story-card h3 {
+  margin: 0 0 0.35rem;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 500;
+}
+.story-card p { margin: 0; color: var(--muted); font-size: 0.92rem; line-height: 1.45; }
 .form-row { display: flex; gap: 0.75rem; margin: 1.25rem 0; flex-wrap: wrap; }
 .cta-row { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.5rem; }
 

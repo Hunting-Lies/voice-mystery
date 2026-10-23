@@ -2,6 +2,8 @@
   const $ = (id) => document.getElementById(id);
 
   const state = {
+    scripts: [],
+    selectedScriptId: null,
     roomCode: null,
     playerId: null,
     playerName: null,
@@ -62,9 +64,14 @@
 
   $("mcpUrl").textContent = `${location.origin}/mcp/tools`;
 
+  loadScripts();
+
   $("btnCreate").onclick = async () => {
     const name = ($("nameInput").value || "接线员").trim();
-    const res = await api("POST", "/api/rooms", { name });
+    const res = await api("POST", "/api/rooms", {
+      name,
+      scriptId: state.selectedScriptId || undefined,
+    });
     enterRoom(res);
   };
 
@@ -81,7 +88,10 @@
 
   $("btnSolo").onclick = async () => {
     const name = ($("nameInput").value || "接线员").trim();
-    const res = await api("POST", "/api/rooms", { name });
+    const res = await api("POST", "/api/rooms", {
+      name,
+      scriptId: state.selectedScriptId || undefined,
+    });
     await api("POST", `/api/rooms/${res.roomCode}/fill-bots`, {});
     enterRoom(res);
   };
@@ -127,6 +137,54 @@
   $("btnMicToggle").onclick = () => toggleClickToTalk();
 
   bindHoldToTalk($("btnMic"));
+
+  async function loadScripts() {
+    try {
+      const data = await api("GET", "/api/scripts");
+      state.scripts = data.scripts || [];
+      if (state.scripts.length && !state.selectedScriptId) {
+        selectScript(state.scripts[0].id);
+      }
+      renderStoryPicker();
+    } catch (e) {
+      console.warn("load scripts", e);
+    }
+  }
+
+  function scriptById(id) {
+    return state.scripts.find((s) => s.id === id);
+  }
+
+  function selectScript(id) {
+    state.selectedScriptId = id;
+    renderStoryPicker();
+    const s = scriptById(id);
+    if (s?.callerHint) {
+      $("callerHint").textContent = s.callerHint;
+    }
+  }
+
+  function renderStoryPicker() {
+    const root = $("storyList");
+    if (!root) return;
+    root.innerHTML = "";
+    for (const s of state.scripts) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "story-card" + (s.id === state.selectedScriptId ? " selected" : "");
+      btn.innerHTML = `<h3>${escapeHtml(s.title)}</h3><p>${escapeHtml(s.synopsis || "")}</p>`;
+      btn.onclick = () => selectScript(s.id);
+      root.appendChild(btn);
+    }
+  }
+
+  function escapeHtml(text) {
+    return String(text)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
 
   function setSpeakStatus(msg, kind = "") {
     const el = $("speakStatus");
@@ -179,7 +237,11 @@
   function render(snap) {
     if (!snap) return;
     state.snapshot = snap;
-    $("meta").textContent = `${phaseLabel[snap.phase] || snap.phase} · ${snap.players.length} 人`;
+    const scriptTag = snap.scriptTitle ? ` · ${snap.scriptTitle}` : "";
+    $("meta").textContent = `${phaseLabel[snap.phase] || snap.phase} · ${snap.players.length} 人${scriptTag}`;
+    if (snap.callerHint) {
+      $("callerHint").textContent = snap.callerHint;
+    }
     $("phasePill").textContent = phaseLabel[snap.phase] || snap.phase;
     $("hostLine").textContent = snap.hostLine || "";
     $("roomCode").textContent = snap.roomCode;
@@ -224,10 +286,21 @@
       list.appendChild(li);
     });
 
-    const roleMap = { citizen: "市民", scammer: "来电骗子（隐藏）" };
+    const roleMap = {
+      citizen: snap.citizenRoleLabel || "市民",
+      scammer: snap.scammerRoleLabel || "来电骗子（隐藏）",
+    };
+    if ($("voteLabel") && snap.voteLabel) {
+      $("voteLabel").textContent = snap.voteLabel;
+    }
     if (state.private && snap.phase !== "lobby") {
-      $("secretRole").textContent = roleMap[state.private.role] || state.private.role || "未分配";
-      $("secretCard").textContent = state.private.secretCard || "";
+      const priv = state.private;
+      if (priv.characterName && priv.characterLabel) {
+        $("secretRole").textContent = `${priv.characterName} · ${priv.characterLabel}`;
+      } else {
+        $("secretRole").textContent = roleMap[priv.role] || priv.role || "未分配";
+      }
+      $("secretCard").textContent = priv.secretCard || "";
     } else {
       $("secretRole").textContent = "对局开始后揭晓";
       $("secretCard").textContent = "请保守你的秘密身份卡，不要让它直接出现在公开发言里。";

@@ -22,13 +22,16 @@ const (
 )
 
 type Player struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	IsBot    bool   `json:"isBot"`
-	Role     Role   `json:"role,omitempty"`
-	Alive    bool   `json:"alive"`
-	Ready    bool   `json:"ready"`
-	JoinedAt time.Time `json:"joinedAt"`
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	IsBot           bool   `json:"isBot"`
+	Role            Role   `json:"role,omitempty"`
+	Alive           bool   `json:"alive"`
+	Ready           bool   `json:"ready"`
+	JoinedAt        time.Time `json:"joinedAt"`
+	characterName   string
+	characterLabel  string
+	characterCard   string
 }
 
 type Statement struct {
@@ -65,7 +68,12 @@ type PublicState struct {
 	VotesNeeded       int             `json:"votesNeeded"`
 	Winner            string          `json:"winner,omitempty"` // citizens | scammer
 	RevealedScammer   string          `json:"revealedScammer,omitempty"`
+	ScriptID          string          `json:"scriptId,omitempty"`
 	ScriptTitle       string          `json:"scriptTitle,omitempty"`
+	CallerHint        string          `json:"callerHint,omitempty"`
+	VoteLabel         string          `json:"voteLabel,omitempty"`
+	CitizenRoleLabel  string          `json:"citizenRoleLabel,omitempty"`
+	ScammerRoleLabel  string          `json:"scammerRoleLabel,omitempty"`
 	PhaseDeadlineUnix int64           `json:"phaseDeadlineUnix,omitempty"`
 	CanStart          bool            `json:"canStart"`
 }
@@ -79,7 +87,9 @@ type PublicPlayer struct {
 }
 
 type PrivateView struct {
-	PlayerID   string `json:"playerId"`
-	Role       Role   `json:"role"`
-	SecretCard string `json:"secretCard"`
+	PlayerID       string `json:"playerId"`
+	Role           Role   `json:"role"`
+	SecretCard     string `json:"secretCard"`
+	CharacterName  string `json:"characterName,omitempty"`
+	CharacterLabel string `json:"characterLabel,omitempty"`
 }
