@@ -271,6 +271,39 @@ input:focus, textarea:focus { border-color: var(--accent); }
 }
 .vote-grid button { width: 100%; border-radius: 12px; }
 
+.value-recap {
+  margin-top: 1rem;
+  border-color: rgba(62, 207, 191, 0.28);
+  background:
+    linear-gradient(160deg, rgba(18, 48, 52, 0.55), rgba(8, 18, 28, 0.7));
+}
+.value-recap h2 {
+  margin-bottom: 0.35rem;
+}
+.value-theme {
+  margin: 0 0 0.75rem;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+}
+.value-points {
+  margin: 0 0 0.85rem;
+  padding-left: 1.15rem;
+  color: #c9d8e4;
+  line-height: 1.65;
+  font-size: 0.95rem;
+}
+.value-points li {
+  margin-bottom: 0.45rem;
+}
+.value-closing {
+  margin: 0 0 0.75rem;
+  color: #9eb4c4;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
 .log-body {
   max-height: 260px;
   overflow: auto;
