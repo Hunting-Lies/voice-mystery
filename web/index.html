@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>来电疑云</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700&family=JetBrains+Mono:wght@400;600&family=ZCOOL+XiaoWei&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="noise"></div>
+  <div class="glow"></div>
+
+  <header class="top">
+    <div class="brand">来电疑云</div>
+    <div class="meta" id="meta"></div>
+  </header>
+
+  <main>
+    <section id="landing" class="panel landing">
+      <p class="eyebrow">灵矽 Builder Day · 语音辨谎</p>
+      <h1>午夜响起的<br />那通电话</h1>
+      <p class="lead">多人语音社交推理。听清线索，识破骗子，投出真凶。</p>
+      <div class="form-row">
+        <input id="nameInput" maxlength="12" placeholder="你的代号" value="接线员" />
+      </div>
+      <div class="cta-row">
+        <button id="btnCreate" class="btn primary">创建房间</button>
+        <button id="btnJoin" class="btn ghost">加入房间</button>
+        <button id="btnSolo" class="btn accent">单人演示（补机器人）</button>
+      </div>
+      <div class="form-row join-code hidden" id="joinRow">
+        <input id="codeInput" maxlength="8" placeholder="房间号" />
+        <button id="btnJoinConfirm" class="btn primary">进入</button>
+      </div>
+    </section>
+
+    <section id="table" class="hidden">
+      <div class="layout">
+        <aside class="side">
+          <div class="card-block">
+            <h2>房间 <span id="roomCode" class="mono"></span></h2>
+            <ul id="playerList" class="players"></ul>
+          </div>
+          <div class="card-block secret" id="secretBlock">
+            <h2>秘密身份卡</h2>
+            <p id="secretRole" class="role"></p>
+            <p id="secretCard" class="secret-text"></p>
+          </div>
+          <div class="card-block controls" id="lobbyControls">
+            <button id="btnFillBots" class="btn ghost">补机器人到 3 人</button>
+            <button id="btnStart" class="btn primary">开始游戏</button>
+          </div>
+        </aside>
+
+        <section class="stage">
+          <div class="phase-pill" id="phasePill">大厅</div>
+          <div class="phone">
+            <div class="phone-screen">
+              <div class="caller">未知来电 · 星河银行？</div>
+              <div class="host-line" id="hostLine">…</div>
+            </div>
+            <button id="btnSpeakHost" class="btn tiny">朗读主持词</button>
+          </div>
+
+          <div class="action" id="actionPanel">
+            <div id="briefingActions" class="hidden">
+              <button id="btnAdvance" class="btn primary">听完了，进入盘问</button>
+            </div>
+            <div id="speakActions" class="hidden">
+              <label class="label">你的发言</label>
+              <textarea id="speakText" rows="3" placeholder="可直接打字，或按住说话听写…"></textarea>
+              <p class="speak-status" id="speakStatus">轮到你了：按住说话录音，松手后本地识别；也可直接打字。</p>
+              <div class="cta-row">
+                <button id="btnMic" class="btn ghost hold-talk" type="button">按住说话</button>
+                <button id="btnMicToggle" class="btn ghost" type="button">点按录音</button>
+                <button id="btnSubmitSpeak" class="btn primary" type="button">提交发言</button>
+              </div>
+            </div>
+            <div id="voteActions" class="hidden">
+              <label class="label">指认来电骗子</label>
+              <div id="voteTargets" class="vote-grid"></div>
+            </div>
+            <div id="endActions" class="hidden">
+              <button id="btnReplay" class="btn primary">再来一局</button>
+            </div>
+          </div>
+
+          <div class="log card-block">
+            <h2>现场记录</h2>
+            <div id="log" class="log-body"></div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span>对接灵矽 MCP：</span>
+    <code id="mcpUrl"></code>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>
