@@ -74,6 +74,10 @@ type PublicState struct {
 	VoteLabel         string          `json:"voteLabel,omitempty"`
 	CitizenRoleLabel  string          `json:"citizenRoleLabel,omitempty"`
 	ScammerRoleLabel  string          `json:"scammerRoleLabel,omitempty"`
+	ValueTheme        string          `json:"valueTheme,omitempty"`   // 结算主题，如反诈宣传
+	ValuePoints       []string        `json:"valuePoints,omitempty"`  // 关键防范点
+	ValueClosing      string          `json:"valueClosing,omitempty"` // 收束寄语
+	ValueSummary      string          `json:"valueSummary,omitempty"` // 完整价值复盘文案（可朗读）
 	PhaseDeadlineUnix int64           `json:"phaseDeadlineUnix,omitempty"`
 	CanStart          bool            `json:"canStart"`
 }

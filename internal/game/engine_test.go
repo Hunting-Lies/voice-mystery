@@ -67,4 +67,7 @@ func TestFullMatchWithBots(t *testing.T) {
 	if snap.Winner != "citizens" && snap.Winner != "scammer" {
 		t.Fatalf("bad winner %s", snap.Winner)
 	}
+	if snap.ValueSummary == "" || snap.ValueTheme == "" || len(snap.ValuePoints) == 0 {
+		t.Fatalf("expected value recap, theme=%q points=%d summary=%q", snap.ValueTheme, len(snap.ValuePoints), snap.ValueSummary)
+	}
 }

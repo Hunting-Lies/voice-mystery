@@ -48,6 +48,10 @@ type Room struct {
 	hostLine       string
 	winner         string
 	revealed       string
+	valueTheme     string
+	valuePoints    []string
+	valueClosing   string
+	valueSummary   string
 	phaseDeadline  time.Time
 	createdAt      time.Time
 	nextBotActAt   time.Time // 限制机器人出手速度，给真人留操作时间
@@ -198,6 +202,10 @@ func (r *Room) Start() error {
 	r.speakerIdx = 0
 	r.winner = ""
 	r.revealed = ""
+	r.valueTheme = ""
+	r.valuePoints = nil
+	r.valueClosing = ""
+	r.valueSummary = ""
 	r.Phase = PhaseBriefing
 	r.hostLine = r.Script.Briefing
 	// 播报阶段不自动跳转：等主持词念完后由玩家/MCP 手动 advance。
@@ -387,12 +395,59 @@ func (r *Room) revealLocked() error {
 		accused := r.Players[topID]
 		r.hostLine = r.Script.revealScammerWin(accused.Name, scammerName)
 	}
-	if ep := strings.TrimSpace(r.Script.Epilogue); ep != "" {
-		r.hostLine = r.hostLine + "\n\n" + ep
+	// 有结构化价值点时走价值复盘卡片；否则回退剧本 Epilogue 拼进主持词
+	if len(r.Script.ValuePoints) == 0 {
+		if ep := strings.TrimSpace(r.Script.Epilogue); ep != "" {
+			r.hostLine = r.hostLine + "\n\n" + ep
+		}
 	}
+	r.applyValueRecapLocked()
 	r.Phase = PhaseEnd
 	r.phaseDeadline = time.Time{}
 	return nil
+}
+
+// applyValueRecapLocked 按剧本情节生成结算价值复盘（反诈宣传 / 安全教育）。
+func (r *Room) applyValueRecapLocked() {
+	theme := strings.TrimSpace(r.Script.Theme)
+	if theme == "" {
+		theme = "反诈宣传 · 安全教育"
+	}
+	points := append([]string{}, r.Script.ValuePoints...)
+	if len(points) == 0 {
+		points = []string{
+			"不轻信陌生来电的紧急转账、验证码索要要求。",
+			"涉及资金与账户操作，请走官方 App 或网点核实。",
+			"保持冷静，拒绝催促：给自己留出查证时间。",
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("本局剧本《%s》。主题：%s。", r.Script.Title, theme))
+	if r.winner == "citizens" {
+		b.WriteString("大家识破了骗局。请把下列防范点带走：")
+	} else {
+		b.WriteString("骗子本局得逞——现实中一次误判就可能造成损失。请对照下列防范点复盘：")
+	}
+	for i, p := range points {
+		b.WriteString(fmt.Sprintf("%d、%s", i+1, strings.TrimSpace(p)))
+		if i < len(points)-1 {
+			b.WriteString(" ")
+		}
+	}
+	closing := strings.TrimSpace(r.Script.Closing)
+	if closing == "" {
+		closing = "玩游戏是入口，守住钱袋子、守住安全感才是目的。把今晚学到的判断力用在下一次真实来电里。"
+	}
+	b.WriteString(" ")
+	b.WriteString(closing)
+
+	r.valueTheme = theme
+	r.valuePoints = points
+	r.valueClosing = closing
+	r.valueSummary = b.String()
+	// 主持词附上简短引导，完整复盘见 valueSummary（前端展示并朗读）
+	r.hostLine = r.hostLine + " 接下来进入本局价值复盘。"
 }
 
 func (r *Room) AutoActBots() (changed bool) {
@@ -413,8 +468,8 @@ func (r *Room) AutoActBots() (changed bool) {
 		if cur != nil && cur.IsBot {
 			text := r.pickBotLine(cur.Role, true)
 			_ = r.submitStatementNoLock(curID, text)
-			// 给 Demo TTS 留出朗读他人发言的时间
-			r.nextBotActAt = time.Now().Add(4 * time.Second)
+			// 盘问间隔：兼顾节奏与 TTS 朗读
+			r.nextBotActAt = time.Now().Add(2 * time.Second)
 			return true
 		}
 	case PhaseCrossExam:
@@ -424,7 +479,7 @@ func (r *Room) AutoActBots() (changed bool) {
 			if p != nil && p.IsBot {
 				text := r.pickBotLine(p.Role, false)
 				_ = r.submitCrossNoLock(cur.TargetPlayerID, text)
-				r.nextBotActAt = time.Now().Add(4 * time.Second)
+				r.nextBotActAt = time.Now().Add(2 * time.Second)
 				return true
 			}
 		}
@@ -658,6 +713,10 @@ func (r *Room) Snapshot() PublicState {
 		VoteLabel:         r.Script.voteLabel(),
 		CitizenRoleLabel:  r.Script.citizenRoleLabel(),
 		ScammerRoleLabel:  r.Script.scammerRoleLabel(),
+		ValueTheme:        r.valueTheme,
+		ValuePoints:       append([]string{}, r.valuePoints...),
+		ValueClosing:      r.valueClosing,
+		ValueSummary:      r.valueSummary,
 		PhaseDeadlineUnix: deadline,
 		CanStart:          r.Phase == PhaseLobby && len(r.Players) >= MinPlayers,
 	}

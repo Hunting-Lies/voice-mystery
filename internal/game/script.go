@@ -36,6 +36,11 @@ type CallScript struct {
 	RevealScammerWinFmt  string // %s 被误投者, %s 隐藏嫌疑人名
 	Epilogue          string
 	Characters        []StoryCharacter // 非空时按角色发身份卡，替代 CitizenCard/ScammerCard
+
+	// 结算价值复盘（反诈宣传 / 安全教育等）
+	Theme       string   // 如：银行反诈宣传 · 安全教育
+	ValuePoints []string // 关键防范点
+	Closing     string   // 收束寄语
 }
 
 // ScriptMeta 供大厅展示，不含剧透身份卡。
@@ -205,5 +210,14 @@ func scriptMidnightBank() CallScript {
 				"我觉得说话最冲的那个人很可疑。",
 			},
 		},
+		Theme: "银行反诈宣传 · 防伪冒客服安全教育",
+		ValuePoints: []string{
+			"正规银行、支付机构绝不会要求你把钱转到所谓「安全账户」「保证金账户」。",
+			"任何索要短信验证码、动态口令的来电/链接都要警惕：验证码等于把账户交给对方。",
+			"「系统升级、只能电话办、必须立刻转」是典型催促话术，真实业务允许你挂断后走官方渠道核实。",
+			"客服工号、来电显示可以伪造；请通过官方 App、官网客服或网点二次确认，不要回拨陌生号码。",
+			"收到异常提醒时：不转账、不泄密、不远程操控；可拨打银行官方客服或报警电话核实。",
+		},
+		Closing: "《来电疑云》用一局游戏演练真实骗局。把今晚记住的防范点带回家、带进单位：识破一通电话，就可能守住一笔积蓄。",
 	}
 }

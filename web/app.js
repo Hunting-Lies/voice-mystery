@@ -36,6 +36,7 @@
     currentAudio: null,
     spokenStmtCount: 0,
     spokenCrossKeys: Object.create(null),
+    spokenValueRecap: false,
   };
 
   const HOST_VOICE_KEY = "__host__";
@@ -101,7 +102,20 @@
   };
 
   $("btnStart").onclick = async () => {
-    await api("POST", `/api/rooms/${state.roomCode}/start`, {});
+    const btn = $("btnStart");
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "接通中…";
+    }
+    try {
+      await api("POST", `/api/rooms/${state.roomCode}/start`, {});
+      // 状态经 WS 推送后立刻朗读；此处仅作瞬时反馈
+    } catch (_) {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "开始游戏";
+      }
+    }
   };
 
   $("btnAdvance").onclick = async () => {
@@ -134,6 +148,11 @@
     await api("POST", `/api/rooms/${state.roomCode}/advance`, {});
   }
   $("btnReplay").onclick = () => location.reload();
+  $("btnSpeakValue").onclick = () => {
+    const text = state.snapshot?.valueSummary || "";
+    if (!text) return;
+    enqueueTTS({ text, profileKey: HOST_VOICE_KEY, forceClear: true });
+  };
   $("btnMicToggle").onclick = () => toggleClickToTalk();
 
   bindHoldToTalk($("btnMic"));
@@ -201,6 +220,7 @@
     state.private = res.private;
     state.spokenStmtCount = 0;
     state.spokenCrossKeys = Object.create(null);
+    state.spokenValueRecap = false;
     state.voiceAssign = Object.create(null);
     state.voiceRoster = Object.create(null);
     state.lastHost = "";
@@ -261,7 +281,7 @@
 
       if (snap.phase === "briefing") {
         enqueueTTS({ text: snap.hostLine, profileKey: HOST_VOICE_KEY, forceClear: true });
-      } else if (["statement", "cross_exam", "vote", "end"].includes(snap.phase) && snap.hostLine.length < 90) {
+      } else if (["statement", "cross_exam", "vote", "end"].includes(snap.phase) && snap.hostLine.length < 120) {
         // 不 forceClear：与刚入队的玩家发言串行，避免「发言完毕」盖掉正文
         enqueueTTS({
           text: snap.hostLine,
@@ -270,6 +290,17 @@
         });
       }
     }
+
+    // 结算：自动朗读剧本价值复盘（反诈宣传 / 安全教育）
+    if (snap.phase === "end" && snap.valueSummary && !state.spokenValueRecap) {
+      state.spokenValueRecap = true;
+      enqueueTTS({
+        text: snap.valueSummary,
+        profileKey: HOST_VOICE_KEY,
+        forceClear: false,
+      });
+    }
+    if (snap.phase !== "end") state.spokenValueRecap = false;
 
     const list = $("playerList");
     list.innerHTML = "";
@@ -328,6 +359,7 @@
 
     $("voteActions").classList.toggle("hidden", snap.phase !== "vote");
     $("endActions").classList.toggle("hidden", snap.phase !== "end");
+    renderValueRecap(snap);
 
     if (snap.phase === "vote") {
       const grid = $("voteTargets");
@@ -361,8 +393,33 @@
     });
     if (snap.phase === "end") {
       parts.push(`<div class="item"><div class="name">结算</div>${escapeHtml(snap.hostLine)}（胜方：${snap.winner === "citizens" ? "市民" : "骗子"}）</div>`);
+      if (snap.valueTheme) {
+        parts.push(`<div class="item"><div class="name">价值主题</div>${escapeHtml(snap.valueTheme)}</div>`);
+      }
     }
     log.innerHTML = parts.join("") || "<div class='item'>等待对局开始…</div>";
+  }
+
+  function renderValueRecap(snap) {
+    const box = $("valueRecap");
+    if (!box) return;
+    const show = snap.phase === "end" && !!(snap.valueSummary || (snap.valuePoints && snap.valuePoints.length));
+    box.classList.toggle("hidden", !show);
+    if (!show) return;
+
+    $("valueTheme").textContent = snap.valueTheme
+      ? `主题：${snap.valueTheme}`
+      : `剧本：${snap.scriptTitle || "本局"}`;
+
+    const ul = $("valuePoints");
+    ul.innerHTML = "";
+    (snap.valuePoints || []).forEach((p) => {
+      const li = document.createElement("li");
+      li.textContent = p;
+      ul.appendChild(li);
+    });
+
+    $("valueClosing").textContent = snap.valueClosing || snap.valueSummary || "";
   }
 
   function updateAdvanceButton() {
@@ -1072,20 +1129,37 @@
 
   async function speakChunks(text, profileKey, gen) {
     if (gen !== state.ttsGeneration) return;
-    // 优先灵矽同款 CosyVoice（温暖元气男 / 实力歌手男 / 智慧青年男 / 豪放可爱女）
+    const phase = state.snapshot?.phase;
+    const isHost = profileKey === HOST_VOICE_KEY;
+    const isBriefingHost = phase === "briefing" && isHost;
+
     if (state.lingxiTTS) {
-      const ok = await playLingxiAudio(text, profileKey, gen);
+      if (isBriefingHost) {
+        // 开局主持长文：最多等 2s；超时才用浏览器，避免干等
+        const ok = await playLingxiAudio(text, profileKey, gen, { timeoutMs: 2000 });
+        if (ok || gen !== state.ttsGeneration) return;
+        await speakBrowserChunks(text, profileKey, gen);
+        return;
+      }
+      // 玩家发言 / 短主持词：必须用设定的 CosyVoice 音色（温暖元气/实力歌手/智慧青年/豪放可爱）
+      // 不设短超时，避免被浏览器音色顶替
+      const ok = await playLingxiAudio(text, profileKey, gen, { timeoutMs: 45000 });
       if (ok || gen !== state.ttsGeneration) return;
+      // 仅接口硬失败时回退，并打日志
+      console.warn("[tts] CosyVoice failed, fallback browser for", profileKey);
     }
     await speakBrowserChunks(text, profileKey, gen);
   }
 
-  async function playLingxiAudio(text, profileKey, gen) {
+  async function playLingxiAudio(text, profileKey, gen, { timeoutMs = 45000 } = {}) {
+    const ctrl = new AbortController();
+    const timer = timeoutMs > 0 ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
     try {
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, speakerKey: profileKey }),
+        signal: ctrl.signal,
       });
       const ct = res.headers.get("content-type") || "";
       if (!res.ok || !ct.includes("audio")) {
@@ -1094,15 +1168,17 @@
       }
       if (gen !== state.ttsGeneration) return true;
       const blob = await res.blob();
+      if (gen !== state.ttsGeneration) return true;
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       state.currentAudio = audio;
       const voiceName = res.headers.get("X-Voice-Name");
-      if (voiceName && profileKey !== HOST_VOICE_KEY) {
+      const voiceId = res.headers.get("X-Voice-Id");
+      if (voiceName) {
         state.voiceRoster[profileKey] = {
           ...(state.voiceRoster[profileKey] || {}),
           name: voiceName,
-          id: res.headers.get("X-Voice-Id") || "",
+          id: voiceId || "",
         };
       }
       await new Promise((resolve) => {
@@ -1118,6 +1194,8 @@
       return gen === state.ttsGeneration;
     } catch (_) {
       return false;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 
