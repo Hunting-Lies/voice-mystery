@@ -54,6 +54,7 @@ func (s *Server) handleTTSSynthesize(w http.ResponseWriter, r *http.Request) {
 		SpeakerKey string `json:"speakerKey"` // __host__ 或 playerId
 		PlayerID   string `json:"playerId"`
 		Prefix     string `json:"prefix"`
+		VoiceID    string `json:"voiceId"` // 可选，与 roster 一致
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "无效 JSON", "fallback": true})
@@ -80,7 +81,7 @@ func (s *Server) handleTTSSynthesize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	voice, audio, ct, err := s.tts.Synthesize(r.Context(), key, text)
+	voice, audio, ct, err := s.tts.Synthesize(r.Context(), key, text, strings.TrimSpace(body.VoiceID))
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]any{
 			"error":    err.Error(),
@@ -91,7 +92,7 @@ func (s *Server) handleTTSSynthesize(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", ct)
 	w.Header().Set("X-Voice-Id", voice.ID)
-	w.Header().Set("X-Voice-Name", voice.Name)
+	// 中文名仅通过 JSON roster 下发；响应头非 ASCII 易被浏览器误解析为乱码
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(audio)

@@ -2,7 +2,7 @@ package tts
 
 import "testing"
 
-func TestEnsureSpeakerRotation(t *testing.T) {
+func TestEnsureSpeakerHostAndStable(t *testing.T) {
 	s := &Service{
 		assign:   make(map[string]Voice),
 		cache:    make(map[string]cachedAudio),
@@ -12,23 +12,35 @@ func TestEnsureSpeakerRotation(t *testing.T) {
 	if host.ID != HostVoice.ID {
 		t.Fatalf("host want %s got %s", HostVoice.ID, host.ID)
 	}
-	a := s.EnsureSpeaker("p1")
-	b := s.EnsureSpeaker("p2")
-	c := s.EnsureSpeaker("p3")
-	d := s.EnsureSpeaker("p4")
-	if a.ID != VoiceWarmMale.ID || b.ID != VoiceSingerMale.ID || c.ID != VoiceSmartMale.ID {
-		t.Fatalf("player pool order wrong: %s %s %s", a.Name, b.Name, c.Name)
+	narr := s.EnsureSpeaker(NarratorKey)
+	if narr.ID != NarratorVoice.ID {
+		t.Fatalf("narrator want %s got %s", NarratorVoice.ID, narr.ID)
 	}
-	if d.ID != VoiceWarmMale.ID {
-		t.Fatalf("4th player should wrap to warm male, got %s", d.Name)
+	a := s.EnsureSpeaker("player-alpha")
+	b := s.EnsureSpeaker("player-beta")
+	if a.ID == "" || b.ID == "" {
+		t.Fatal("players need voices")
 	}
-	if s.EnsureSpeaker("p1").ID != a.ID {
-		t.Fatal("assignment must be stable")
+	if s.EnsureSpeaker("player-alpha").ID != a.ID {
+		t.Fatal("assignment must be stable for same key")
+	}
+	if a.ID == b.ID {
+		t.Log("warning: two keys hashed to same voice (possible with pool of 4)")
 	}
 }
 
 func TestCatalogHasFourVoices(t *testing.T) {
 	if len(Catalog()) != 4 {
 		t.Fatalf("want 4 voices")
+	}
+}
+
+func TestVoiceSlotIndexSpread(t *testing.T) {
+	seen := map[int]bool{}
+	for _, k := range []string{"a", "b", "c", "d", "e", "f"} {
+		seen[voiceSlotIndex(k, len(PlayerPool))] = true
+	}
+	if len(seen) < 2 {
+		t.Fatalf("expected hash spread across pool, got %d slots", len(seen))
 	}
 }

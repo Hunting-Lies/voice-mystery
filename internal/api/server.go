@@ -192,7 +192,7 @@ func (s *Server) handleRoomAction(w http.ResponseWriter, r *http.Request) {
 			"private": mustPrivate(roomObj, p.ID),
 		})
 	case "fill-bots":
-		_, err := roomObj.FillBots(game.MinPlayers)
+		_, err := roomObj.FillBots(0)
 		if err != nil {
 			writeErr(w, err)
 			return
@@ -350,7 +350,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		case "mark":
 			_ = roomObj.MarkSuspect(playerID, msg.TargetID)
 		case "fill_bots":
-			_, _ = roomObj.FillBots(game.MinPlayers)
+			_, _ = roomObj.FillBots(0)
 		case "ping":
 			continue
 		}

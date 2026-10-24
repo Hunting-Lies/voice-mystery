@@ -105,6 +105,18 @@ body {
   font-family: var(--font-display);
   font-size: 1.15rem;
   font-weight: 500;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.story-meta {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+  font-weight: 400;
 }
 .story-card p { margin: 0; color: var(--muted); font-size: 0.92rem; line-height: 1.45; }
 .form-row { display: flex; gap: 0.75rem; margin: 1.25rem 0; flex-wrap: wrap; }
@@ -271,15 +283,107 @@ input:focus, textarea:focus { border-color: var(--accent); }
 }
 .vote-grid button { width: 100%; border-radius: 12px; }
 
-.clue-board, .score-board {
+.clue-board {
   margin-top: 1rem;
 }
+
+/* —— 结算主面板（评分 + 价值复盘） —— */
+.settlement-hero {
+  margin: 0.5rem 0 1.25rem;
+  padding: 1.25rem 1.35rem 1.35rem;
+  border-radius: 22px;
+  border: 1px solid rgba(232, 164, 90, 0.45);
+  background:
+    radial-gradient(900px 320px at 0% 0%, rgba(62, 207, 191, 0.16), transparent 55%),
+    radial-gradient(700px 280px at 100% 0%, rgba(232, 164, 90, 0.14), transparent 50%),
+    linear-gradient(165deg, rgba(14, 32, 44, 0.96), rgba(8, 16, 24, 0.98));
+  box-shadow:
+    0 0 0 1px rgba(62, 207, 191, 0.12),
+    0 24px 48px rgba(0, 0, 0, 0.35);
+  animation: settlement-in 0.45s ease-out;
+}
+@keyframes settlement-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.settlement-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.15rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.settlement-badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  color: #1a1208;
+  background: linear-gradient(120deg, #e8a45a, #f0c078);
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  margin-bottom: 0.45rem;
+}
+.settlement-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.45rem, 3.5vw, 1.85rem);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+}
+.settlement-sub {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+.settlement-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+}
+.settlement-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.95fr) minmax(280px, 1.05fr);
+  gap: 1rem;
+}
+@media (max-width: 820px) {
+  .settlement-grid { grid-template-columns: 1fr; }
+}
+.settlement-card {
+  border-radius: 16px;
+  padding: 1rem 1.1rem 1.05rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(4, 14, 22, 0.55);
+}
+.settlement-card h3 {
+  margin: 0 0 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+.score-board {
+  border-color: rgba(232, 164, 90, 0.35);
+}
+.value-recap {
+  border-color: rgba(62, 207, 191, 0.35);
+  background:
+    linear-gradient(160deg, rgba(18, 48, 52, 0.45), rgba(8, 18, 28, 0.65));
+}
+
 .clue-list, .score-list {
   list-style: none;
   margin: 0;
   padding: 0;
 }
-.clue-list li, .score-list li {
+.clue-list li {
   padding: 0.55rem 0;
   border-bottom: 1px solid rgba(255,255,255,0.06);
   line-height: 1.5;
@@ -292,43 +396,174 @@ input:focus, textarea:focus { border-color: var(--accent); }
   font-size: 0.78rem;
   margin-right: 0.4rem;
 }
+.score-list .score-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  gap: 0.15rem 0.75rem;
+  padding: 0.65rem 0.55rem;
+  margin-bottom: 0.45rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.score-list .score-row--top {
+  border-color: rgba(232, 164, 90, 0.45);
+  background: linear-gradient(120deg, rgba(232, 164, 90, 0.12), rgba(255, 255, 255, 0.04));
+}
+.score-rank {
+  grid-row: 1 / span 2;
+  align-self: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--muted);
+  background: rgba(0, 0, 0, 0.25);
+}
+.score-row--top .score-rank {
+  color: #1a1208;
+  background: linear-gradient(120deg, #e8a45a, #f0c078);
+}
+.score-main {
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
 .score-list .score-n {
   color: var(--warn);
   font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+.score-list .score-n small {
+  font-size: 0.65rem;
+  margin-left: 0.1rem;
   font-weight: 600;
 }
+.score-name {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.score-note {
+  grid-column: 2;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
 
-.value-recap {
-  margin-top: 1rem;
-  border-color: rgba(62, 207, 191, 0.28);
-  background:
-    linear-gradient(160deg, rgba(18, 48, 52, 0.55), rgba(8, 18, 28, 0.7));
-}
-.value-recap h2 {
-  margin-bottom: 0.35rem;
-}
 .value-theme {
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.85rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
   color: var(--accent);
   font-family: var(--font-mono);
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   letter-spacing: 0.04em;
+  background: rgba(62, 207, 191, 0.08);
+  border: 1px solid rgba(62, 207, 191, 0.2);
 }
 .value-points {
   margin: 0 0 0.85rem;
-  padding-left: 1.15rem;
-  color: #c9d8e4;
+  padding-left: 0;
+  list-style: none;
+  color: #dce8f0;
   line-height: 1.65;
-  font-size: 0.95rem;
+  font-size: 0.98rem;
 }
 .value-points li {
-  margin-bottom: 0.45rem;
+  position: relative;
+  margin-bottom: 0.55rem;
+  padding-left: 1.35rem;
+}
+.value-points li::before {
+  content: "▸";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-size: 0.85rem;
 }
 .value-closing {
-  margin: 0 0 0.75rem;
-  color: #9eb4c4;
-  font-size: 0.92rem;
-  line-height: 1.6;
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  color: #c9d8e4;
+  font-size: 0.95rem;
+  line-height: 1.65;
+  background: rgba(0, 0, 0, 0.22);
+  border-left: 3px solid var(--warn);
+}
+
+.phone--settled {
+  opacity: 0.72;
+  transform: scale(0.98);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.phone--settled .host-line {
+  max-height: 120px;
+  overflow: auto;
+  font-size: 0.95rem;
+}
+
+.log-panel {
+  margin: 0.85rem 0 0.25rem;
+}
+.log-panel summary {
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  user-select: none;
+}
+.log-panel summary::-webkit-details-marker { display: none; }
+.log-summary-hint {
+  font-size: 0.75rem;
+  color: rgba(138, 160, 179, 0.85);
+}
+.log-panel--end .log-summary-hint { color: var(--accent); }
+.log-panel:not([open]) .log-body { display: none; }
+
+/* 盘问 / 质询：固定在来电区下方、发言区上方 */
+.log-panel--speak {
+  margin: 1rem 0;
+  padding: 1rem 1.15rem 1.05rem;
+  border: 1px solid rgba(62, 207, 191, 0.45);
+  background:
+    radial-gradient(600px 200px at 0% 0%, rgba(62, 207, 191, 0.12), transparent 55%),
+    linear-gradient(165deg, rgba(12, 32, 42, 0.92), rgba(6, 14, 22, 0.95));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+.log-panel--speak summary {
+  color: var(--accent);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  margin-bottom: 0.35rem;
+  pointer-events: none;
+}
+.log-panel--speak .log-body {
+  max-height: min(42vh, 360px);
+  font-size: 1rem;
+  line-height: 1.65;
+}
+.log-panel--speak .log-body .name {
+  font-size: 0.88rem;
+  color: var(--warn);
+}
+.log-panel--speak .log-body .item.speaking {
+  background: rgba(232, 164, 90, 0.14);
+  border: 1px solid rgba(232, 164, 90, 0.35);
 }
 
 .log-body {
@@ -338,7 +573,13 @@ input:focus, textarea:focus { border-color: var(--accent); }
   line-height: 1.55;
   color: #b7c8d6;
 }
-.log-body .item { padding: 0.45rem 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.log-body .item { padding: 0.45rem 0; border-bottom: 1px solid rgba(255,255,255, 0.04); transition: background 0.2s ease; }
+.log-body .item.speaking {
+  background: rgba(62, 207, 191, 0.12);
+  border-radius: 8px;
+  padding-left: 0.35rem;
+  padding-right: 0.35rem;
+}
 .log-body .name { color: var(--accent); font-family: var(--font-mono); font-size: 0.8rem; }
 
 .foot {

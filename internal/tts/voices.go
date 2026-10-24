@@ -18,11 +18,14 @@ var (
 	VoiceBoldCuteFemale = Voice{ID: "longxian_v2", Name: "豪放可爱女", Gender: "female", Remark: "龙仙"}
 )
 
-// PlayerPool 按入座顺序轮换给玩家（不含主持）。
-var PlayerPool = []Voice{VoiceWarmMale, VoiceSingerMale, VoiceSmartMale}
+// PlayerPool 按 playerId 稳定哈希分配（含四款音色，减少五人局重复）。
+var PlayerPool = []Voice{VoiceWarmMale, VoiceSingerMale, VoiceSmartMale, VoiceBoldCuteFemale}
 
-// HostVoice 主持播报默认音色。
-var HostVoice = VoiceBoldCuteFemale
+// HostVoice 内勤/物证播报：温暖元气男，长文通报更自然（百炼 CosyVoice）。
+var HostVoice = Voice{ID: VoiceWarmMale.ID, Name: "内勤播报", Gender: "male", Remark: "龙泽·主持"}
+
+// NarratorVoice 故事梗概与价值复盘：活泼女声（百炼 CosyVoice）。
+var NarratorVoice = Voice{ID: VoiceBoldCuteFemale.ID, Name: "活泼解说", Gender: "female", Remark: "龙仙·梗概/复盘"}
 
 func Catalog() []Voice {
 	return []Voice{VoiceWarmMale, VoiceSingerMale, VoiceSmartMale, VoiceBoldCuteFemale}

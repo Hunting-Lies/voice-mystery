@@ -22,6 +22,7 @@ var (
 	ErrNameTaken       = errors.New("昵称已被占用")
 	ErrNotLobby        = errors.New("当前不在大厅阶段")
 	ErrNotEnoughPlayers = errors.New("至少需要3名玩家才能开始")
+	ErrWrongPlayerCount = errors.New("玩家人数与剧本要求不符")
 	ErrWrongPhase      = errors.New("当前阶段不允许此操作")
 	ErrNotYourTurn     = errors.New("还没轮到你发言")
 	ErrAlreadyVoted    = errors.New("你已经投过票了")
@@ -106,7 +107,8 @@ func (r *Room) AddPlayer(name string, isBot bool) (*Player, error) {
 	if name == "" {
 		return nil, errors.New("昵称不能为空")
 	}
-	if len(r.Players) >= MaxPlayers {
+	maxP := r.Script.MaxPlayersForScript()
+	if len(r.Players) >= maxP {
 		return nil, ErrRoomFull
 	}
 	for _, p := range r.Players {
@@ -123,7 +125,7 @@ func (r *Room) AddPlayer(name string, isBot bool) (*Player, error) {
 	}
 	r.Players[p.ID] = p
 	r.order = append(r.order, p.ID)
-	r.hostLine = fmt.Sprintf("%s 已入座。当前 %d/%d 人。", p.Name, len(r.Players), MaxPlayers)
+	r.hostLine = fmt.Sprintf("%s 已入座。当前 %d/%d 人。", p.Name, len(r.Players), maxP)
 	return p, nil
 }
 
@@ -133,11 +135,20 @@ func (r *Room) FillBots(target int) ([]*Player, error) {
 	if r.Phase != PhaseLobby {
 		return nil, ErrNotLobby
 	}
-	if target < MinPlayers {
-		target = MinPlayers
-	}
-	if target > MaxPlayers {
-		target = MaxPlayers
+	minP := r.Script.MinPlayersForScript()
+	maxP := r.Script.MaxPlayersForScript()
+	if r.Script.HasFixedRoster() {
+		target = minP
+	} else {
+		if target <= 0 {
+			target = minP
+		}
+		if target < minP {
+			target = minP
+		}
+		if target > maxP {
+			target = maxP
+		}
 	}
 	botNames := []string{"阿北", "小满", "老周", "青青", "阿凯"}
 	if len(r.Script.BotNames) > 0 {
@@ -166,7 +177,11 @@ func (r *Room) FillBots(target int) ([]*Player, error) {
 		r.order = append(r.order, p.ID)
 		added = append(added, p)
 	}
-	r.hostLine = fmt.Sprintf("已补齐至 %d 人，可以说「开始游戏」。", len(r.Players))
+	if r.Script.HasFixedRoster() {
+		r.hostLine = fmt.Sprintf("已补齐至 %d 人（本剧本需 %d 人），满员后可开始游戏。", len(r.Players), minP)
+	} else {
+		r.hostLine = fmt.Sprintf("已补齐至 %d 人，至少 %d 人可开始游戏。", len(r.Players), minP)
+	}
 	return added, nil
 }
 
@@ -185,8 +200,17 @@ func (r *Room) Start() error {
 	if r.Phase != PhaseLobby {
 		return ErrWrongPhase
 	}
-	if len(r.Players) < MinPlayers {
+	n := len(r.Players)
+	minP := r.Script.MinPlayersForScript()
+	maxP := r.Script.MaxPlayersForScript()
+	if r.Script.HasFixedRoster() {
+		if n != minP {
+			return fmt.Errorf("%w：需要 %d 人，当前 %d 人", ErrWrongPlayerCount, minP, n)
+		}
+	} else if n < minP {
 		return ErrNotEnoughPlayers
+	} else if n > maxP {
+		return ErrRoomFull
 	}
 
 	ids := append([]string{}, r.order...)
@@ -463,7 +487,7 @@ func (r *Room) applyValueRecapLocked() {
 	r.valueClosing = closing
 	r.valueSummary = b.String()
 	// 主持词附上简短引导，完整复盘见 valueSummary（前端展示并朗读）
-	r.hostLine = r.hostLine + " 接下来进入本局价值复盘。"
+	r.hostLine = r.hostLine + " 接下来进入本局复盘。"
 }
 
 func (r *Room) AutoActBots() (changed bool) {
@@ -716,6 +740,35 @@ func (r *Room) assignStoryCharactersLocked(scammerPlayerID string) {
 		j, _ := rand.Int(rand.Reader, big.NewInt(int64(i+1)))
 		others[i], others[j.Int64()] = others[j.Int64()], others[i]
 	}
+	nPlayers := len(r.order)
+	if nPlayers == len(chars) {
+		// 人数与角色一一对应，五位角色全部到场
+		pool := append([]int{}, others...)
+		shuffleInts := func(a []int) {
+			for i := len(a) - 1; i > 0; i-- {
+				j, _ := rand.Int(rand.Reader, big.NewInt(int64(i+1)))
+				a[i], a[j.Int64()] = a[j.Int64()], a[i]
+			}
+		}
+		shuffleInts(pool)
+		oi := 0
+		for _, id := range r.order {
+			p := r.Players[id]
+			var ci int
+			if id == scammerPlayerID {
+				ci = scammerIdx
+			} else {
+				ci = pool[oi]
+				oi++
+			}
+			c := chars[ci]
+			p.characterName = c.Name
+			p.characterLabel = c.Label
+			p.characterCard = c.SecretCard
+			p.Name = c.Name
+		}
+		return
+	}
 	oi := 0
 	for _, id := range r.order {
 		p := r.Players[id]
@@ -736,6 +789,7 @@ func (r *Room) assignStoryCharactersLocked(scammerPlayerID string) {
 		p.characterName = c.Name
 		p.characterLabel = c.Label
 		p.characterCard = c.SecretCard
+		p.Name = c.Name
 	}
 }
 
@@ -773,6 +827,19 @@ func (r *Room) PrivateView(playerID string) (*PrivateView, error) {
 	return view, nil
 }
 
+func (r *Room) canStartLocked() bool {
+	if r.Phase != PhaseLobby {
+		return false
+	}
+	n := len(r.Players)
+	minP := r.Script.MinPlayersForScript()
+	maxP := r.Script.MaxPlayersForScript()
+	if r.Script.HasFixedRoster() {
+		return n == minP
+	}
+	return n >= minP && n <= maxP
+}
+
 func (r *Room) Snapshot() PublicState {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -807,8 +874,8 @@ func (r *Room) Snapshot() PublicState {
 		Phase:             r.Phase,
 		HostLine:          r.hostLine,
 		Players:           players,
-		MinPlayers:        MinPlayers,
-		MaxPlayers:        MaxPlayers,
+		MinPlayers:        r.Script.MinPlayersForScript(),
+		MaxPlayers:        r.Script.MaxPlayersForScript(),
 		StatementOrder:    append([]string{}, r.order...),
 		CurrentSpeakerID:  curSpeaker,
 		Statements:        append([]Statement{}, r.statements...),
@@ -834,7 +901,7 @@ func (r *Room) Snapshot() PublicState {
 		SuspicionTally:    tally,
 		Scores:            append([]PlayerScore{}, r.scores...),
 		PhaseDeadlineUnix: deadline,
-		CanStart:          r.Phase == PhaseLobby && len(r.Players) >= MinPlayers,
+		CanStart:          r.canStartLocked(),
 	}
 	return st
 }

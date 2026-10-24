@@ -247,7 +247,7 @@ func (s *Server) Call(name string, args map[string]any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		if _, err := r.FillBots(game.MinPlayers); err != nil {
+		if _, err := r.FillBots(0); err != nil {
 			return nil, err
 		}
 		return r.Snapshot(), nil

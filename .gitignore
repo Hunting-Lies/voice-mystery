@@ -4,3 +4,6 @@
 *.test
 .DS_Store
 /tmp/
+.venv-asr/
+.env
+.env.local

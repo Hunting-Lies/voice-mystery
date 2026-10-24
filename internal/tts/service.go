@@ -3,20 +3,23 @@ package tts
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"sync"
 )
 
-const HostKey = "__host__"
+const (
+	HostKey     = "__host__"
+	NarratorKey = "__narrator__"
+)
 
 type Service struct {
 	client *dashClient
 
 	mu       sync.Mutex
-	assign   map[string]Voice // speakerKey -> voice
-	playerN  int              // 已分配玩家数（不含主持）
-	cache    map[string]cachedAudio
+	assign map[string]Voice // speakerKey -> voice
+	cache  map[string]cachedAudio
 	cacheMax int
 }
 
@@ -54,7 +57,7 @@ func (s *Service) Status() map[string]any {
 	}
 }
 
-// EnsureSpeaker 为 speakerKey 分配固定音色；主持用豪放可爱女，玩家轮换三男声。
+// EnsureSpeaker 为 speakerKey 分配固定音色；主持单独音色，玩家按 id 稳定哈希到 PlayerPool。
 func (s *Service) EnsureSpeaker(speakerKey string) Voice {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -62,19 +65,30 @@ func (s *Service) EnsureSpeaker(speakerKey string) Voice {
 		return v
 	}
 	var v Voice
-	if speakerKey == HostKey || speakerKey == "" {
+	switch speakerKey {
+	case HostKey, "":
 		v = HostVoice
-	} else {
-		v = PlayerPool[s.playerN%len(PlayerPool)]
-		s.playerN++
+	case NarratorKey:
+		v = NarratorVoice
+	default:
+		v = PlayerPool[voiceSlotIndex(speakerKey, len(PlayerPool))]
 	}
 	s.assign[speakerKey] = v
 	return v
 }
 
+func voiceSlotIndex(speakerKey string, n int) int {
+	if n <= 0 {
+		return 0
+	}
+	sum := sha256.Sum256([]byte(speakerKey))
+	return int(binary.BigEndian.Uint32(sum[:4]) % uint32(n))
+}
+
 func (s *Service) Roster(playerIDs []string) map[string]Voice {
-	out := make(map[string]Voice, len(playerIDs)+1)
+	out := make(map[string]Voice, len(playerIDs)+2)
 	out[HostKey] = s.EnsureSpeaker(HostKey)
+	out[NarratorKey] = s.EnsureSpeaker(NarratorKey)
 	for _, id := range playerIDs {
 		if id == "" {
 			continue
@@ -88,15 +102,19 @@ func (s *Service) ResetAssignments() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.assign = make(map[string]Voice)
-	s.playerN = 0
 }
 
-// Synthesize 合成音频；未启用时返回错误。
-func (s *Service) Synthesize(ctx context.Context, speakerKey, text string) (Voice, []byte, string, error) {
+// Synthesize 合成音频；voiceIDOverride 非空时强制使用该 CosyVoice 音色（与 roster 展示一致）。
+func (s *Service) Synthesize(ctx context.Context, speakerKey, text, voiceIDOverride string) (Voice, []byte, string, error) {
 	if !s.Enabled() {
 		return Voice{}, nil, "", fmt.Errorf("TTS 未启用：请设置 DASHSCOPE_API_KEY")
 	}
 	voice := s.EnsureSpeaker(speakerKey)
+	if voiceIDOverride != "" {
+		if v, ok := Lookup(voiceIDOverride); ok {
+			voice = v
+		}
+	}
 	cacheKey := voice.ID + "|" + hashText(text)
 
 	s.mu.Lock()
