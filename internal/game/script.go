@@ -48,10 +48,12 @@ type CallScript struct {
 
 // ScriptMeta 供大厅展示，不含剧透身份卡。
 type ScriptMeta struct {
-	ID         string `json:"id"`
-	Title      string `json:"title"`
-	Synopsis   string `json:"synopsis"`
-	CallerHint string `json:"callerHint"`
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Synopsis    string `json:"synopsis"`
+	CallerHint  string `json:"callerHint"`
+	PlayerCount int    `json:"playerCount"`
+	FixedRoster bool   `json:"fixedRoster"`
 }
 
 const ScriptMidnightBank = "midnight-bank"
@@ -114,6 +116,25 @@ func (s CallScript) scammerRoleLabel() string {
 	return "来电骗子（隐藏）"
 }
 
+// HasFixedRoster 固定角色剧本：人数必须等于 len(Characters)。
+func (s CallScript) HasFixedRoster() bool {
+	return len(s.Characters) > 0
+}
+
+func (s CallScript) MinPlayersForScript() int {
+	if s.HasFixedRoster() {
+		return len(s.Characters)
+	}
+	return MinPlayers
+}
+
+func (s CallScript) MaxPlayersForScript() int {
+	if s.HasFixedRoster() {
+		return len(s.Characters)
+	}
+	return MaxPlayers
+}
+
 func DefaultScriptID() string {
 	return ScriptMidnightBank
 }
@@ -131,10 +152,12 @@ func ScriptMetas() []ScriptMeta {
 			continue
 		}
 		out = append(out, ScriptMeta{
-			ID:         s.ID,
-			Title:      s.Title,
-			Synopsis:   s.Synopsis,
-			CallerHint: s.CallerHint,
+			ID:          s.ID,
+			Title:       s.Title,
+			Synopsis:    s.Synopsis,
+			CallerHint:  s.CallerHint,
+			PlayerCount: s.MinPlayersForScript(),
+			FixedRoster: s.HasFixedRoster(),
 		})
 	}
 	return out

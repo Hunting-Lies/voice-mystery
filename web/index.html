@@ -28,7 +28,7 @@
         <div id="storyList" class="story-list"></div>
       </div>
       <div class="form-row">
-        <input id="nameInput" maxlength="12" placeholder="你的代号" value="接线员" />
+        <input id="nameInput" maxlength="12" placeholder="大厅昵称（角色剧本开局后显示角色名）" value="接线员" />
       </div>
       <div class="cta-row">
         <button id="btnCreate" class="btn primary">创建房间</button>
@@ -72,6 +72,40 @@
             </div>
           </div>
 
+          <section id="settlementHero" class="settlement-hero hidden" aria-label="对局结算">
+            <div class="settlement-head">
+              <div>
+                <span class="settlement-badge">对局结束</span>
+                <h2 class="settlement-title">本局复盘</h2>
+                <p class="settlement-sub" id="settlementSubtitle">查看评分与反诈要点</p>
+              </div>
+              <div class="settlement-head-actions">
+                <button id="btnSpeakValue" class="btn ghost" type="button">朗读复盘</button>
+                <button id="btnReplay" class="btn primary" type="button">再来一局</button>
+              </div>
+            </div>
+            <div class="settlement-grid">
+              <div id="scoreBoard" class="settlement-card score-board">
+                <h3>本局评分</h3>
+                <ul id="scoreList" class="score-list"></ul>
+              </div>
+              <div id="valueRecap" class="settlement-card value-recap">
+                <h3>复盘</h3>
+                <p class="value-theme" id="valueTheme"></p>
+                <ul class="value-points" id="valuePoints"></ul>
+                <p class="value-closing" id="valueClosing"></p>
+              </div>
+            </div>
+          </section>
+
+          <details id="logPanel" class="log card-block log-panel" open>
+            <summary class="log-summary">
+              <span id="logPanelTitle">现场记录</span>
+              <span class="log-summary-hint" id="logPanelHint">（点击展开）</span>
+            </summary>
+            <div id="log" class="log-body"></div>
+          </details>
+
           <div class="action" id="actionPanel">
             <div id="briefingActions" class="hidden">
               <button id="btnAdvance" class="btn primary" type="button">听完了，进入盘问</button>
@@ -100,9 +134,7 @@
               <label class="label" id="voteLabel">指认来电骗子</label>
               <div id="voteTargets" class="vote-grid"></div>
             </div>
-            <div id="endActions" class="hidden">
-              <button id="btnReplay" class="btn primary">再来一局</button>
-            </div>
+            <div id="endActions" class="hidden"></div>
           </div>
 
           <div id="clueBoard" class="card-block clue-board hidden">
@@ -110,23 +142,6 @@
             <ul id="clueList" class="clue-list"></ul>
           </div>
 
-          <div id="scoreBoard" class="card-block score-board hidden">
-            <h2>本局评分</h2>
-            <ul id="scoreList" class="score-list"></ul>
-          </div>
-
-          <div id="valueRecap" class="card-block value-recap hidden">
-            <h2>本局价值复盘</h2>
-            <p class="value-theme" id="valueTheme"></p>
-            <ul class="value-points" id="valuePoints"></ul>
-            <p class="value-closing" id="valueClosing"></p>
-            <button id="btnSpeakValue" class="btn tiny ghost" type="button">朗读价值复盘</button>
-          </div>
-
-          <div class="log card-block">
-            <h2>现场记录</h2>
-            <div id="log" class="log-body"></div>
-          </div>
         </section>
       </div>
     </section>

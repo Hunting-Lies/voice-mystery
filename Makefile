@@ -1,6 +1,7 @@
 .PHONY: run test demo tidy asr-deps
 
 run:
+	@set -a; [ -f .env ] && . ./.env; set +a; \
 	go run ./cmd/server -addr :8080 -web ./web
 
 # 本地按住说话 ASR（需 ffmpeg；Python 建议 3.11–3.13）

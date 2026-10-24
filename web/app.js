@@ -35,11 +35,43 @@
     ttsGeneration: 0,
     currentAudio: null,
     spokenStmtCount: 0,
+    spokenStatementKeys: Object.create(null),
+    speakingLogKey: "",
     spokenCrossKeys: Object.create(null),
     spokenValueRecap: false,
+    scrolledSettlement: false,
   };
 
   const HOST_VOICE_KEY = "__host__";
+  const NARRATOR_VOICE_KEY = "__narrator__";
+
+  /** CosyVoice 音色展示名（勿用 HTTP 头里的中文，易乱码） */
+  const VOICE_LABELS = {
+    longze_v2: "温暖元气男",
+    kabuleshen_v2: "实力歌手男",
+    longcheng_v2: "智慧青年男",
+    longxian_v2: "豪放可爱女",
+  };
+
+  function voiceDisplayName(entry) {
+    if (!entry) return "";
+    const id = entry.id || entry.ID || "";
+    const raw = entry.name || entry.Name || "";
+    if (/[\u4e00-\u9fff]/.test(raw)) return raw;
+    if (id && VOICE_LABELS[id]) return VOICE_LABELS[id];
+    return raw;
+  }
+
+  function normalizeVoiceRoster(roster) {
+    const out = Object.create(null);
+    for (const [key, val] of Object.entries(roster || {})) {
+      if (!val || typeof val !== "object") continue;
+      const id = val.id || val.ID || "";
+      const name = voiceDisplayName({ id, name: val.name || val.Name });
+      out[key] = { ...val, id, name };
+    }
+    return out;
+  }
 
   refreshLingxiTTSStatus();
   // 预加载浏览器音色（无密钥时兜底）
@@ -134,9 +166,12 @@
     submitSpeak();
   };
   $("btnSpeakHost").onclick = () => {
+    const snap = state.snapshot;
+    const profileKey =
+      snap?.phase === "briefing" ? NARRATOR_VOICE_KEY : HOST_VOICE_KEY;
     enqueueTTS({
-      text: state.snapshot?.hostLine || "",
-      profileKey: HOST_VOICE_KEY,
+      text: snap?.hostLine || "",
+      profileKey,
       forceClear: true,
     });
   };
@@ -158,7 +193,7 @@
   $("btnSpeakValue").onclick = () => {
     const text = state.snapshot?.valueSummary || "";
     if (!text) return;
-    enqueueTTS({ text, profileKey: HOST_VOICE_KEY, forceClear: true });
+    enqueueTTS({ text, profileKey: NARRATOR_VOICE_KEY, forceClear: true });
   };
   $("btnMicToggle").onclick = () => toggleClickToTalk();
 
@@ -198,7 +233,10 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "story-card" + (s.id === state.selectedScriptId ? " selected" : "");
-      btn.innerHTML = `<h3>${escapeHtml(s.title)}</h3><p>${escapeHtml(s.synopsis || "")}</p>`;
+      const people = s.playerCount
+        ? `<span class="story-meta">${s.fixedRoster ? "固定" : "建议"} ${s.playerCount} 人</span>`
+        : "";
+      btn.innerHTML = `<h3>${escapeHtml(s.title)}${people}</h3><p>${escapeHtml(s.synopsis || "")}</p>`;
       btn.onclick = () => selectScript(s.id);
       root.appendChild(btn);
     }
@@ -226,10 +264,14 @@
     state.playerName = res.player.name;
     state.private = res.private;
     state.spokenStmtCount = 0;
+    state.spokenStatementKeys = Object.create(null);
+    state.speakingLogKey = "";
     state.spokenCrossKeys = Object.create(null);
     state.spokenValueRecap = false;
+    state.scrolledSettlement = false;
     state.voiceAssign = Object.create(null);
     state.voiceRoster = Object.create(null);
+    lastRosterKey = "";
     state.lastHost = "";
     clearTTS();
     $("landing").classList.add("hidden");
@@ -263,6 +305,7 @@
 
   function render(snap) {
     if (!snap) return;
+    const prevPhase = state.snapshot?.phase;
     state.snapshot = snap;
     const scriptTag = snap.scriptTitle ? ` · ${snap.scriptTitle}` : "";
     $("meta").textContent = `${phaseLabel[snap.phase] || snap.phase} · ${snap.players.length} 人${scriptTag}`;
@@ -276,26 +319,40 @@
     // 同步灵矽音色座位表（一人一音）；无密钥时走浏览器兜底档案
     syncVoiceRoster(snap, false);
     voiceProfileFor(HOST_VOICE_KEY);
+    voiceProfileFor(NARRATOR_VOICE_KEY);
     (snap.players || []).forEach((p) => voiceProfileFor(p.id));
 
-    // 先入队他人发言（盘问 / 质询回答），再播主持词，保证「先听人话再听主持」
-    enqueueNewPlayerReplies(snap);
+    const enteredEnd = snap.phase === "end" && prevPhase !== "end";
+    if (enteredEnd) clearTTS();
+
+    // 先入队现场记录中的盘问发言，再播主持词（盘问阶段跳过「发言完毕」类短提示，避免盖过人声）
+    const newStmtSpeech = enqueueNewPlayerReplies(snap);
 
     if (snap.hostLine && snap.hostLine !== state.lastHost) {
       state.lastHost = snap.hostLine;
       document.querySelector(".phone").classList.add("live");
       setTimeout(() => document.querySelector(".phone").classList.remove("live"), 1800);
 
+      const skipTurnHost =
+        snap.phase === "statement" &&
+        newStmtSpeech &&
+        /发言完毕|下一位/.test(snap.hostLine);
+
       if (snap.phase === "briefing") {
-        enqueueTTS({ text: snap.hostLine, profileKey: HOST_VOICE_KEY, forceClear: true });
-      } else if (["statement", "evidence", "mark", "cross_exam", "vote", "end"].includes(snap.phase) && snap.hostLine.length < 160) {
-        // 不 forceClear：与刚入队的玩家发言串行，避免「发言完毕」盖掉正文
+        enqueueTTS({ text: snap.hostLine, profileKey: NARRATOR_VOICE_KEY, forceClear: true });
+      } else if (snap.phase === "end") {
+        enqueueTTS({
+          text: snap.hostLine,
+          profileKey: HOST_VOICE_KEY,
+          forceClear: enteredEnd,
+        });
+      } else if (!skipTurnHost && ["statement", "evidence", "mark", "cross_exam", "vote"].includes(snap.phase) && snap.hostLine.length < 160) {
         enqueueTTS({
           text: snap.hostLine,
           profileKey: HOST_VOICE_KEY,
           forceClear: false,
         });
-      } else if (snap.phase === "evidence" && snap.hostLine) {
+      } else if (!skipTurnHost && snap.phase === "evidence" && snap.hostLine) {
         enqueueTTS({ text: snap.hostLine, profileKey: HOST_VOICE_KEY, forceClear: false });
       }
     }
@@ -305,7 +362,7 @@
       state.spokenValueRecap = true;
       enqueueTTS({
         text: snap.valueSummary,
-        profileKey: HOST_VOICE_KEY,
+        profileKey: NARRATOR_VOICE_KEY,
         forceClear: false,
       });
     }
@@ -316,7 +373,7 @@
     snap.players.forEach((p) => {
       const li = document.createElement("li");
       if (p.id === snap.currentSpeakerId) li.classList.add("speaking");
-      const voiceName = state.voiceRoster[p.id]?.name || "";
+      const voiceName = voiceDisplayName(state.voiceRoster[p.id]);
       const tags = [
         p.isBot ? "BOT" : "HUMAN",
         voiceName,
@@ -351,6 +408,17 @@
 
     $("lobbyControls").classList.toggle("hidden", snap.phase !== "lobby");
     $("btnStart").disabled = !snap.canStart;
+    const fillBtn = $("btnFillBots");
+    if (fillBtn && snap.phase === "lobby") {
+      const minP = snap.minPlayers || 3;
+      const maxP = snap.maxPlayers || minP;
+      if (minP === maxP && minP > 0) {
+        fillBtn.textContent = `补机器人到 ${minP} 人（本剧本 ${minP} 人）`;
+      } else {
+        fillBtn.textContent = `补机器人到 ${minP} 人`;
+      }
+      fillBtn.disabled = snap.players.length >= maxP;
+    }
 
     $("briefingActions").classList.toggle("hidden", snap.phase !== "briefing");
     $("evidenceActions").classList.toggle("hidden", snap.phase !== "evidence");
@@ -373,6 +441,56 @@
 
     $("voteActions").classList.toggle("hidden", snap.phase !== "vote");
     $("endActions").classList.toggle("hidden", snap.phase !== "end");
+    const isEnd = snap.phase === "end";
+    const hero = $("settlementHero");
+    const phone = document.querySelector(".phone");
+    const logPanel = $("logPanel");
+    const hasSettlement =
+      (snap.scores && snap.scores.length > 0) ||
+      snap.valueSummary ||
+      snap.valueClosing ||
+      (snap.valuePoints && snap.valuePoints.length > 0);
+    if (hero) hero.classList.toggle("hidden", !isEnd || !hasSettlement);
+    if (phone) phone.classList.toggle("phone--settled", isEnd);
+    const isSpeakPhase = snap.phase === "statement" || snap.phase === "cross_exam";
+    if (logPanel) {
+      logPanel.classList.toggle("log-panel--speak", isSpeakPhase);
+      logPanel.classList.toggle("log-panel--end", isEnd);
+      if (isSpeakPhase) {
+        logPanel.open = true;
+      } else if (isEnd) {
+        logPanel.open = false;
+      } else {
+        logPanel.open = true;
+      }
+    }
+    const logTitle = $("logPanelTitle");
+    const logHint = $("logPanelHint");
+    if (logTitle) {
+      logTitle.textContent = isSpeakPhase ? "盘问实况" : "现场记录";
+    }
+    if (logHint) {
+      logHint.classList.toggle("hidden", isSpeakPhase || isEnd);
+    }
+    if (isEnd && hero && !state.scrolledSettlement) {
+      state.scrolledSettlement = true;
+      requestAnimationFrame(() => {
+        hero.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+    if (!isEnd) state.scrolledSettlement = false;
+
+    const sub = $("settlementSubtitle");
+    if (sub && isEnd) {
+      const win =
+        snap.winner === "citizens"
+          ? "侦查方指认成功"
+          : snap.winner === "scammer"
+            ? "话术组脱罪"
+            : "对局已结束";
+      sub.textContent = `${win} · ${snap.scriptTitle || "本局"}`;
+    }
+
     renderClueBoard(snap);
     renderScoreBoard(snap);
     renderValueRecap(snap);
@@ -423,8 +541,12 @@
 
     const log = $("log");
     const parts = [];
-    (snap.statements || []).forEach((s) => {
-      parts.push(`<div class="item"><div class="name">${escapeHtml(s.name)} · 盘问</div>${escapeHtml(s.text)}</div>`);
+    (snap.statements || []).forEach((s, idx) => {
+      const stmtKey = statementKey(s, idx);
+      const live = stmtKey === state.speakingLogKey ? " speaking" : "";
+      parts.push(
+        `<div class="item${live}" data-stmt-key="${escapeHtml(stmtKey)}"><div class="name">${escapeHtml(s.name)} · 盘问</div>${escapeHtml(s.text)}</div>`,
+      );
     });
     (snap.publicClues || []).forEach((c) => {
       parts.push(`<div class="item"><div class="name">物证 · ${escapeHtml(c.title)}</div>${escapeHtml(c.text)}</div>`);
@@ -467,9 +589,17 @@
     if (!show) return;
     const ul = $("scoreList");
     ul.innerHTML = "";
-    scores.forEach((s) => {
+    scores.forEach((s, i) => {
       const li = document.createElement("li");
-      li.innerHTML = `<span class="score-n">${s.score}分</span> ${escapeHtml(s.name)} — ${escapeHtml(s.note || "")}`;
+      const rank = i + 1;
+      li.className = "score-row" + (rank === 1 ? " score-row--top" : "");
+      li.innerHTML = `
+        <span class="score-rank">${rank}</span>
+        <div class="score-main">
+          <span class="score-n">${s.score}<small>分</small></span>
+          <span class="score-name">${escapeHtml(s.name)}</span>
+        </div>
+        <p class="score-note">${escapeHtml(s.note || "")}</p>`;
       ul.appendChild(li);
     });
   }
@@ -533,7 +663,9 @@
   function renderValueRecap(snap) {
     const box = $("valueRecap");
     if (!box) return;
-    const show = snap.phase === "end" && !!(snap.valueSummary || (snap.valuePoints && snap.valuePoints.length));
+    const show =
+      snap.phase === "end" &&
+      !!(snap.valueSummary || snap.valueClosing || (snap.valuePoints && snap.valuePoints.length));
     box.classList.toggle("hidden", !show);
     if (!show) return;
 
@@ -976,34 +1108,50 @@
     }
   }
 
-  /** 盘问 / 质询：把新增的「其他人」回复按一人一音色入队朗读 */
+  function statementKey(s, idx) {
+    const at = s?.at ? String(s.at) : String(idx);
+    return `${s?.playerId || "p"}:${at}`;
+  }
+
+  /** 盘问 / 质询：现场记录里每条发言按角色音色串行朗读 */
   function enqueueNewPlayerReplies(snap) {
-    if (!snap) return;
+    if (!snap) return false;
+    const speakPhases = ["statement", "cross_exam", "evidence", "mark", "vote"];
+    if (!speakPhases.includes(snap.phase)) return false;
+
+    let queued = false;
     const statements = snap.statements || [];
-    for (let i = state.spokenStmtCount; i < statements.length; i++) {
+    for (let i = 0; i < statements.length; i++) {
       const s = statements[i];
-      if (!s || s.playerId === state.playerId) continue;
+      if (!s?.text?.trim()) continue;
+      const key = statementKey(s, i);
+      if (state.spokenStatementKeys[key]) continue;
+      state.spokenStatementKeys[key] = true;
       enqueueTTS({
-        text: s.text,
+        text: s.text.trim(),
         profileKey: s.playerId,
-        prefix: `${s.name}说：`,
+        prefix: "",
+        logKey: key,
       });
+      queued = true;
     }
     state.spokenStmtCount = statements.length;
 
     (snap.crossQuestions || []).forEach((q, i) => {
-      if (!q?.answer) return;
-      const key = `${i}:${q.answer}`;
+      if (!q?.answer?.trim()) return;
+      const key = `cross:${i}:${q.targetPlayerId}:${q.answer}`;
       if (state.spokenCrossKeys[key]) return;
       state.spokenCrossKeys[key] = true;
-      if (q.targetPlayerId === state.playerId) return;
       const name = snap.players.find((p) => p.id === q.targetPlayerId)?.name || "玩家";
       enqueueTTS({
-        text: q.answer,
+        text: q.answer.trim(),
         profileKey: q.targetPlayerId,
-        prefix: `${name}回答：`,
+        prefix: "",
+        logKey: `cross:${i}`,
       });
+      queued = true;
     });
+    return queued;
   }
 
   function warmUpVoices() {
@@ -1115,12 +1263,45 @@
     let voice = null;
     if (key === HOST_VOICE_KEY) {
       voice = pool.find(isTaiwanVoice) || pool[0] || null;
+      const profile = {
+        voice,
+        baseId: voice ? baseVoiceId(voice) : "host-fallback",
+        voiceId: "host-browser",
+        pitch: 0.98,
+        rate: 0.92,
+        lang: voice?.lang || "zh-CN",
+      };
+      state.voiceAssign[key] = profile;
+      return profile;
+    }
+    if (key === NARRATOR_VOICE_KEY) {
+      voice =
+        pool.find((v) => /女|female|Meijia|Ting-Ting|Sin-Ji/i.test(v.name || "")) ||
+        pool.find(isTaiwanVoice) ||
+        pool[0] ||
+        null;
+      const profile = {
+        voice,
+        baseId: voice ? baseVoiceId(voice) : "narrator-fallback",
+        voiceId: "narrator-browser",
+        pitch: 1.06,
+        rate: 1.12,
+        lang: voice?.lang || "zh-TW",
+      };
+      state.voiceAssign[key] = profile;
+      return profile;
     } else {
-      voice = pool.find((v) => !used.has(baseVoiceId(v)));
+      const rosterVoice = state.voiceRoster[key];
+      if (rosterVoice?.id && pool.length) {
+        voice =
+          pool.find((v) => (v.name || "").includes(String(rosterVoice.name || "").slice(0, 2))) ||
+          pool[hashStr(key) % pool.length];
+      }
+      if (!voice) {
+        voice = pool.find((v) => !used.has(baseVoiceId(v)));
+      }
       if (!voice && pool.length) {
-        // 按池顺序轮转复用，保证每人都有独立 profile
-        const slot = Object.keys(state.voiceAssign).filter((k) => k !== HOST_VOICE_KEY).length;
-        voice = pool[slot % pool.length];
+        voice = pool[hashStr(key) % pool.length];
       }
     }
 
@@ -1188,7 +1369,7 @@
       const data = await res.json();
       if (token !== rosterSyncToken) return;
       state.lingxiTTS = !!data.enabled;
-      state.voiceRoster = data.roster || Object.create(null);
+      state.voiceRoster = normalizeVoiceRoster(data.roster);
     } catch (_) { /* ignore */ }
   }
 
@@ -1197,6 +1378,7 @@
     state.ttsQueue = [];
     state.ttsPlaying = false;
     state.speakingHost = false;
+    state.speakingLogKey = "";
     if (state.currentAudio) {
       try {
         state.currentAudio.pause();
@@ -1210,17 +1392,26 @@
       btn.disabled = false;
       btn.textContent = "朗读主持词";
     }
+    const valueBtn = $("btnSpeakValue");
+    if (valueBtn) {
+      valueBtn.disabled = false;
+      valueBtn.textContent = "朗读复盘";
+    }
     updateAdvanceButton();
   }
 
-  function enqueueTTS({ text, profileKey, prefix = "", forceClear = false }) {
-    if (!text || !window.speechSynthesis) return;
+  function enqueueTTS({ text, profileKey, prefix = "", forceClear = false, logKey = "" }) {
+    const body = String(text || "").trim();
+    if (!body) return;
+    const canSpeak = !!window.speechSynthesis || state.lingxiTTS;
+    if (!canSpeak) return;
     if (state.holdingMic || state.toggleRecording || state.asrBusy) return;
     if (forceClear) clearTTS();
     state.ttsQueue.push({
-      text: String(text),
+      text: body,
       profileKey: profileKey || HOST_VOICE_KEY,
       prefix: prefix || "",
+      logKey: logKey || "",
     });
     pumpTTS();
   }
@@ -1242,17 +1433,32 @@
     const gen = state.ttsGeneration;
     state.ttsPlaying = true;
     const isHost = item.profileKey === HOST_VOICE_KEY;
-    state.speakingHost = isHost;
+    const isNarrator = item.profileKey === NARRATOR_VOICE_KEY;
+    const phase = state.snapshot?.phase;
+    state.speakingHost = isHost || (isNarrator && phase === "briefing");
+    state.speakingLogKey = item.logKey || "";
+    if (state.snapshot) render(state.snapshot);
     updateAdvanceButton();
-    if (isHost) {
+    if (isHost || (isNarrator && phase === "briefing")) {
       $("btnSpeakHost").disabled = true;
       $("btnSpeakHost").textContent = "朗读中…";
+    }
+    if (isNarrator && phase === "end") {
+      const valueBtn = $("btnSpeakValue");
+      if (valueBtn) {
+        valueBtn.disabled = true;
+        valueBtn.textContent = "朗读中…";
+      }
     }
 
     const full = `${item.prefix || ""}${item.text}`.trim();
     speakChunks(full, item.profileKey, gen).finally(() => {
       if (gen !== state.ttsGeneration) return;
       state.ttsPlaying = false;
+      if (state.speakingLogKey === item.logKey) {
+        state.speakingLogKey = "";
+        if (state.snapshot) render(state.snapshot);
+      }
       pumpTTS();
     });
   }
@@ -1261,19 +1467,22 @@
     if (gen !== state.ttsGeneration) return;
     const phase = state.snapshot?.phase;
     const isHost = profileKey === HOST_VOICE_KEY;
-    const isBriefingHost = phase === "briefing" && isHost;
+    const isNarrator = profileKey === NARRATOR_VOICE_KEY;
+    const isBriefingNarrator = phase === "briefing" && isNarrator;
 
     if (state.lingxiTTS) {
-      if (isBriefingHost) {
-        // 开局主持长文：最多等 2s；超时才用浏览器，避免干等
-        const ok = await playLingxiAudio(text, profileKey, gen, { timeoutMs: 2000 });
+      const isPlayerLine = profileKey !== HOST_VOICE_KEY && profileKey !== NARRATOR_VOICE_KEY;
+      if (isBriefingNarrator || (isNarrator && phase === "end")) {
+        const timeoutMs = isBriefingNarrator ? 90000 : 120000;
+        const ok = await playLingxiAudio(text, profileKey, gen, { timeoutMs });
         if (ok || gen !== state.ttsGeneration) return;
         await speakBrowserChunks(text, profileKey, gen);
         return;
       }
-      // 玩家发言 / 短主持词：必须用设定的 CosyVoice 音色（温暖元气/实力歌手/智慧青年/豪放可爱）
-      // 不设短超时，避免被浏览器音色顶替
-      const ok = await playLingxiAudio(text, profileKey, gen, { timeoutMs: 45000 });
+      // 玩家现场发言：必须用 roster 对应 CosyVoice，整段读、不抢浏览器
+      const ok = await playLingxiAudio(text, profileKey, gen, {
+        timeoutMs: isPlayerLine ? 45000 : 12000,
+      });
       if (ok || gen !== state.ttsGeneration) return;
       // 仅接口硬失败时回退，并打日志
       console.warn("[tts] CosyVoice failed, fallback browser for", profileKey);
@@ -1285,10 +1494,15 @@
     const ctrl = new AbortController();
     const timer = timeoutMs > 0 ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
     try {
+      const rosterEntry = state.voiceRoster[profileKey];
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, speakerKey: profileKey }),
+        body: JSON.stringify({
+          text,
+          speakerKey: profileKey,
+          voiceId: rosterEntry?.id || "",
+        }),
         signal: ctrl.signal,
       });
       const ct = res.headers.get("content-type") || "";
@@ -1302,13 +1516,13 @@
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       state.currentAudio = audio;
-      const voiceName = res.headers.get("X-Voice-Name");
       const voiceId = res.headers.get("X-Voice-Id");
-      if (voiceName) {
+      if (voiceId) {
+        const prev = state.voiceRoster[profileKey] || {};
         state.voiceRoster[profileKey] = {
-          ...(state.voiceRoster[profileKey] || {}),
-          name: voiceName,
-          id: voiceId || "",
+          ...prev,
+          id: voiceId,
+          name: voiceDisplayName({ id: voiceId, name: prev.name }),
         };
       }
       await new Promise((resolve) => {
