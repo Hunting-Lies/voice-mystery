@@ -11,7 +11,8 @@
 | 形态：类狼人杀 | 隐藏身份 + 发言博弈 + 投票出局；主题收敛为「识破诈骗来电」 |
 
 **好玩是入口，防骗是结果。**
-demo视频
+
+**Demo视频**
 
 https://github.com/user-attachments/assets/e0b7e357-048a-4a6e-8fee-34a81811dce7
 
